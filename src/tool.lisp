@@ -30,7 +30,6 @@
   (:documentation "Abstract method that returns alist description of the tool."))
 
 (defmethod to-alist (this)
-    (break)
     `((:name . ,(name this))
       (:description . ,(description this))
       (:parameters .

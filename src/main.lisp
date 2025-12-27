@@ -15,16 +15,19 @@
 
 (defparameter *ctx* nil)
 
-(defun main ()
-  (init))
+(defun main (project-path)
+  (init :project-path project-path))
 
-(defun init (&key (force-init-p t))
+(defun init (&key (project-path nil) (force-init-p t))
   (if (or force-init-p (null *ctx*))
-      (let* ((this (make-instance 'llm:llm)))
+      (let* ((this (make-instance 'llm:llm
+                    :project-path project-path
+                    :tools (list (make-instance 'tool:read-tool)
+                                 (make-instance 'tool:write-tool)
+                                 (make-instance 'tool:delete-tool)))))
         (setf *ctx* this))))
 
 (defun ask (query)
-  (init :force-init-p nil)
 
-  (let ((response (send-chat *ctx* query)))
+  (let ((response (llm:send-query *ctx* query)))
     (log:info "~%~A" response)))
