@@ -44,13 +44,6 @@ Rules:
 
 You must respond with valid JSON only.
 
-Response format:
-
-[{
-    \"type\": \"question | explanation | implementation\",
-    \"response\": <only if question or explanation or implementation>,
-}]
-
 Rules:
 - Output must be valid, parseable JSON.
 - Output can be JSON array including multiple JSON objects
@@ -70,7 +63,6 @@ Rules:
                         ],
                         \"tools\": [
                             ~A
-
                         ],
                         \"stream\": false,
                         \"max_tokens\": 1000
@@ -103,12 +95,16 @@ Rules:
   (let* ((response (call-chat-completion this query))
          (alist (cl-json:decode-json-from-string response)))
 
-    (push (sanitize (format nil "Q: ~A" query)) (history this))
+    (when (log:debug)
+      (log:debug "LLM response: ~A" alist))
+
+    (push (sanitize query) (history this))
 
     (dolist (choice (alexandria:assoc-value alist :choices))
       (let ((result (rutils:-> (alexandria:assoc-value choice :message)
                         (alexandria:assoc-value rutils:% :content))))
-        (push (sanitize (format nil "A: ~A" result)) (history this))
+
+        (push (sanitize result) (history this))
         (return result)))))
 
 (defun sanitize (str)

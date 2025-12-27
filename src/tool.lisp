@@ -6,21 +6,22 @@
 
      #:name
      #:description
-     #:parameters
+     #:properties
 
      #:to-alist
      #:tool-execute
 
      #:read-tool
      #:write-tool
-     #:delete-tool))
+     #:delete-tool
+     #:bash-tool))
 
 (in-package :agent-code/src/tool)
 
 (defclass tool ()
     ((name :type string :accessor name)
      (description :type string :accessor description)
-     (parameters :type list :accessor parameters)
+     (properties :type list :accessor properties)
      (required :type list :accessor required)))
 
 (defgeneric tool-execute (this args)
@@ -30,12 +31,12 @@
   (:documentation "Abstract method that returns alist description of the tool."))
 
 (defmethod to-alist (this)
-    `((:name . ,(name this))
-      (:description . ,(description this))
-      (:parameters .
-            ((:type . :object)
-             (:properties . ,(parameters this))))
-      (:required . ,(required this))))
+  `((:type . :function)
+    (:function . ((:name . ,(name this))
+                  (:description . ,(description this))
+                  (:parameters . ((:type . :object)
+                                  (:properties . ,(properties this))))
+                  (:required . ,(required this))))))
 
 (defun aget (alist item)
   (alexandria:assoc-value alist item))
@@ -43,7 +44,7 @@
 (defclass read-tool (tool)
   ((name :initform "read_file")
    (description :initform "Reads a file from disk.")
-   (parameters :initform '((:path . ((:type . :string)
+   (properties :initform '((:path . ((:type . :string)
                                      (:description . "Absolute path of the file.")))))
    (required :initform '(:path))))
 
@@ -55,7 +56,7 @@
 (defclass write-tool (tool)
   ((name :initform "write_file")
    (description :initform "Writes content to a file on disk.")
-   (parameters :initform '((:path . ((:type . :string)
+   (properties :initform '((:path . ((:type . :string)
                                      (:description . "Absolute path of the file.")))
                            (:content . ((:type . :string)
                                         (:description . "Content of the file.")))))
@@ -69,7 +70,7 @@
 (defclass delete-tool (tool)
   ((name :initform "delete_file")
    (description :initform "Deletes a file from disk.")
-   (parameters :initform '((:path . ((:type . :string)
+   (properties :initform '((:path . ((:type . :string)
                                      (:description . "Absolute path of the file.")))))
    (required :initform '(:path))))
 
@@ -77,3 +78,15 @@
   (if (null args)
       (error "No file specified for deletion.")
       (delete-file (aget args :path))))
+
+(defclass bash-tool (tool)
+  ((name :initform "bash_command")
+   (description :initform "Invoke any bash command.")
+   (properties :initform '((:command . ((:type . :string)
+                                        (:description . "Command and arguments of the bash command.")))))
+   (required :initform '(:command))))
+
+(defmethod tool-execute ((tool bash-tool) args)
+  (if (null args)
+      (error "No command specified.")
+      (uiop:run-program (aget args :command) :output '(:string :stripped t))))

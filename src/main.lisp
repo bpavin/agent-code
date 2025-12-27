@@ -24,7 +24,8 @@
                     :project-path project-path
                     :tools (list (make-instance 'tool:read-tool)
                                  (make-instance 'tool:write-tool)
-                                 (make-instance 'tool:delete-tool)))))
+                                 (make-instance 'tool:delete-tool)
+                                 (make-instance 'tool:bash-tool)))))
         (setf *ctx* this))))
 
 (defun ask (query)
