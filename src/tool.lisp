@@ -1,4 +1,4 @@
-(defpackage :llm-code-cli/src/tool
+(defpackage :agent-code/src/tool
 	(:use :cl)
     (:nicknames :tool)
 	(:export
@@ -15,7 +15,7 @@
      #:write-tool
      #:delete-tool))
 
-(in-package :llm-code-cli/src/tool)
+(in-package :agent-code/src/tool)
 
 (defclass tool ()
     ((name :type string :accessor name)

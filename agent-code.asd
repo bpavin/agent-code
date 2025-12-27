@@ -1,20 +1,20 @@
-(defsystem "llm-code-cli"
+(defsystem "agent-code"
   :version "0.0.1"
   :author ""
   :license ""
   :class :package-inferred-system
   :defsystem-depends-on (:asdf-package-system)
-  :depends-on ("llm-code-cli/src/main")
+  :depends-on ("agent-code/src/main")
   :description ""
-  :in-order-to ((test-op (test-op "llm-code-cli/tests"))))
+  :in-order-to ((test-op (test-op "agent-code/tests"))))
 
-(defsystem "llm-code-cli/tests"
+(defsystem "agent-code/tests"
   :author ""
   :license ""
-  :depends-on ("llm-code-cli"
+  :depends-on ("agent-code"
                "rove")
   :components ((:module "tests"
                 :components
                 ((:file "main"))))
-  :description "Test system for llm-code-cli"
+  :description "Test system for agent-code"
   :perform (test-op (op c) (symbol-call :rove :run c)))
