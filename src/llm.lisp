@@ -130,6 +130,8 @@
          (dolist (tool (tools this))
            (when (string-equal tool-name (tool:name tool))
              (log:debug "Executing tool [name=~A, args=~A]" tool-name args)
-             (add-history this :assistant (tool:tool-execute tool args))))
+             (let ((tool-result (tool:tool-execute tool args)))
+               (log:debug "Tool executed [name=~A, args=~A, result=~A]" tool-name args tool-result)
+               (add-history this :assistant tool-result))))
 
          (send-query this persona nil))))))
