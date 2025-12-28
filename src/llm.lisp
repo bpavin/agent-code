@@ -1,77 +1,52 @@
 (defpackage :agent-code/src/llm
 	(:use :cl)
     (:nicknames :llm)
+    (:import-from :defclass-std)
+    (:import-from :agent-code/src/persona)
     (:import-from :agent-code/src/tool)
 	(:export
      #:llm
-     #:send-query))
+     #:send-query
+     #:project-path
+     #:project-summary))
 
 (in-package :agent-code/src/llm)
 
 (defclass llm ()
   ((url :initform "http://localhost:11434"
         :accessor url)
-   (chat-completion :initform "/v1/chat/completions"
+   (chat-completion :initform "/v1/responses"
                     :accessor chat-completion)
    (model :initform "qwen2.5-coder:7b"
           :accessor model)
    (project-path :initform nil
                  :initarg :project-path
                  :accessor project-path)
+   (project-summary :initform nil
+                 :initarg :project-summary
+                 :accessor project-summary)
    (history :initform nil
             :accessor history)
    (tools :initarg :tools
           :accessor tools)))
 
-(defmethod call-chat-completion ((this llm) query)
-  (let* ((system-prompt
-           (format nil "You are an automated coding agent operating inside a real codebase.
-
-Your job is to modify files to fulfill the user’s request.
-
-Rules:
-- Do not explain your reasoning unless explicitly asked
-- Do not output prose or markdown
-- Do not modify files unnecessarily
-- Preserve formatting, comments, and style
-- Prefer minimal diffs
-- If the request is ambiguous or risky, ask a clarifying question
-- Never invent files that do not exist unless instructed
-- You are working in project ~A
-- Assume changes will be applied directly to disk
-- If your output is not valid JSON, you have failed the task
-- Result must be disk interaction or asking user for more information
-
-You must respond with valid JSON only.
-
-Rules:
-- Output must be valid, parseable JSON.
-- Output can be JSON array including multiple JSON objects
-- If information is missing, use null.
-- Do not add any text outside the JSON.
-"
-                   (project-path this)))
-
-         (assistant-prompt (get-history this))
+(defmethod call-chat-completion ((this llm) persona query)
+  (let* ((conversation (get-history this (persona:system persona)))
          (content (format nil
-                   "{
-                        \"model\": ~A,
-                        \"messages\": [
-                            {\"role\": \"system\", \"content\": ~A},
-                            {\"role\": \"assistant\", \"content\": ~A},
-                            {\"role\": \"user\", \"content\": ~A}
-                        ],
-                        \"tools\": [
-                            ~A
-                        ],
-                        \"stream\": false,
-                        \"max_tokens\": 1000
-                    }"
-                   (cl-json:encode-json-to-string (model this))
-                   (cl-json:encode-json-to-string system-prompt)
-                   (cl-json:encode-json-to-string assistant-prompt)
-                   (cl-json:encode-json-to-string query)
-                   (include-tools-as-json this))))
+                          "{
+                            \"model\": ~A,
+                            \"input\": [
+                                ~A
+                            ],
+                            \"tools\": [
+                                ~A
+                            ],
+                            \"stream\": false,
+                            \"max_tokens\": 1000
+                          }"
+                          (cl-json:encode-json-to-string (model this))
+                          conversation
+                          (include-tools-as-json this))))
     (when (log:debug)
       (log:debug content))
 
@@ -82,30 +57,79 @@ Rules:
               :content content)))
 
 (defmethod include-tools-as-json ((this llm))
-  (serapeum:string-join
+  (to-json-array
    (mapcar (lambda (tool)
-             (cl-json:encode-json-alist-to-string (tool:to-alist tool)))
-           (tools this))
+             (tool:to-alist tool))
+           (tools this))))
+
+(defmethod add-history ((this llm) role content)
+  (push `((:role . ,role) (:content . ,content)) (history this)))
+
+(defmethod get-history ((this llm) system-prompt)
+  (let* ((conversations (reverse (history this))))
+    (push `((:role . :system) (:content . ,system-prompt))
+          conversations)
+    (to-json-array conversations)))
+
+(defun to-json-array (lst)
+  (serapeum:string-join
+   (mapcar #'cl-json:encode-json-alist-to-string lst)
    ","))
 
-(defmethod get-history ((this llm))
-  (serapeum:string-join (reverse (history this)) ""))
+(defmethod send-query ((this llm) persona query)
+  (when (null (history this))
+    (add-history this :assistant (format nil "Project directory is ~A" (project-path this)))
+    (add-history this :assistant (project-summary this)))
 
-(defmethod send-query ((this llm) query)
-  (let* ((response (call-chat-completion this query))
-         (alist (cl-json:decode-json-from-string response)))
+  (when query
+    (add-history this :user query))
+
+  (let* ((api-response (call-chat-completion this persona query)))
 
     (when (log:debug)
-      (log:debug "LLM response: ~A" alist))
+      (log:debug "LLM response: ~A" api-response))
 
-    (push (sanitize query) (history this))
+    (handle-response this persona api-response)))
 
-    (dolist (choice (alexandria:assoc-value alist :choices))
-      (let ((result (rutils:-> (alexandria:assoc-value choice :message)
-                        (alexandria:assoc-value rutils:% :content))))
+(defmethod handle-response ((this llm) persona api-response)
+  (let* ((api-alist (cl-json:decode-json-from-string api-response))
+         (llm-response))
 
-        (push (sanitize result) (history this))
-        (return result)))))
+    (dolist (output (alexandria:assoc-value api-alist :output) llm-response)
+      (let* ((result (rutils:-> (alexandria:assoc-value output :content)
+                         car
+                         (alexandria:assoc-value rutils:% :text)
+                         sanitize)))
+
+        (add-history this (alexandria:assoc-value output :role) result)
+        (setf llm-response result)))
+
+    (act-on-response this persona llm-response)))
 
 (defun sanitize (str)
-  (cl-ppcre:regex-replace-all "\\r\\n|\\n|\\t|\\r" str ""))
+  (cl-ppcre:regex-replace-all "```(json)?" str ""))
+
+(defmethod act-on-response ((this llm) persona result)
+  (let ((result-alist (handler-case
+                          (cl-json:decode-json-from-string result)
+                        (error (e)
+                          (declare (ignore e))))))
+
+    (if (or (null result-alist)
+            (not (listp result-alist)))
+        (return-from act-on-response result))
+
+   (let ((explanation (alexandria:assoc-value result-alist :explanation)))
+     (when explanation
+       (return-from act-on-response explanation)))
+
+    (let ((tool-name (alexandria:assoc-value result-alist :name)))
+     (when tool-name
+       (let ((args (alexandria:assoc-value result-alist :arguments)))
+
+         (dolist (tool (tools this))
+           (when (string-equal tool-name (tool:name tool))
+             (log:debug "Executing tool [name=~A, args=~A]" tool-name args)
+             (add-history this :assistant (tool:tool-execute tool args))))
+
+         (send-query this persona nil))))))

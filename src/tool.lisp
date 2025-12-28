@@ -32,11 +32,11 @@
 
 (defmethod to-alist (this)
   `((:type . :function)
-    (:function . ((:name . ,(name this))
-                  (:description . ,(description this))
-                  (:parameters . ((:type . :object)
-                                  (:properties . ,(properties this))))
-                  (:required . ,(required this))))))
+    (:name . ,(name this))
+    (:description . ,(description this))
+    (:parameters . ((:type . :object)
+                    (:properties . ,(properties this))
+                    (:required . ,(required this))))))
 
 (defun aget (alist item)
   (alexandria:assoc-value alist item))
@@ -49,9 +49,10 @@
    (required :initform '(:path))))
 
 (defmethod tool-execute ((tool read-tool) args)
-  (if (null args)
-      (error "No file specified for reading.")
-      (alexandria:read-file-into-string (aget args :path))))
+  (with-error-as-result
+    (if (null args)
+        (error "No file specified for reading.")
+        (alexandria:read-file-into-string (aget args :path)))))
 
 (defclass write-tool (tool)
   ((name :initform "write_file")
@@ -65,7 +66,8 @@
 (defmethod tool-execute ((tool write-tool) args)
   (if (< (length args) 2)
       (error "Not enough arguments specified for writing.")
-      (alexandria:write-string-into-file (aget args :content) (aget args :path))))
+      (with-error-as-result
+        (alexandria:write-string-into-file (aget args :content) (aget args :path)))))
 
 (defclass delete-tool (tool)
   ((name :initform "delete_file")
@@ -75,9 +77,10 @@
    (required :initform '(:path))))
 
 (defmethod tool-execute ((tool delete-tool) args)
-  (if (null args)
-      (error "No file specified for deletion.")
-      (delete-file (aget args :path))))
+  (with-error-as-result
+    (if (null args)
+        (error "No file specified for deletion.")
+        (delete-file (aget args :path)))))
 
 (defclass bash-tool (tool)
   ((name :initform "bash_command")
@@ -87,6 +90,16 @@
    (required :initform '(:command))))
 
 (defmethod tool-execute ((tool bash-tool) args)
-  (if (null args)
-      (error "No command specified.")
-      (uiop:run-program (aget args :command) :output '(:string :stripped t))))
+  (with-error-as-result
+    (if (null args)
+        (error "No command specified."))
+    (let ((cmd (aget args :command)))
+      (if (serapeum:string-contains-p " rm " cmd)
+          (error "Command is not allowed ~A" "rm"))
+      (uiop:run-program cmd :output '(:string :stripped t)))))
+
+(defmacro with-error-as-result (&body body)
+  `(handler-case
+       (progn ,@body)
+     (error (e)
+       (princ-to-string e))))
