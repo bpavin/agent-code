@@ -17,7 +17,7 @@
         :accessor url)
    (chat-completion :initform "/v1/responses"
                     :accessor chat-completion)
-   (model :initform "qwen2.5-coder:7b"
+   (model :initform "qwen3:8b"
           :accessor model)
    (project-path :initform nil
                  :initarg :project-path
@@ -41,12 +41,14 @@
                             \"tools\": [
                                 ~A
                             ],
+                            \"summary\": \"concise\",
                             \"stream\": false,
+                            \"temperature\": 0.4,
                             \"max_tokens\": 1000
                           }"
                           (cl-json:encode-json-to-string (model this))
                           conversation
-                          (include-tools-as-json this))))
+                          (include-tools-as-json this persona))))
     (when (log:debug)
       (log:debug content))
 
@@ -56,14 +58,20 @@
               :headers '(("Content-type" . "application/json"))
               :content content)))
 
-(defmethod include-tools-as-json ((this llm))
+(defmethod include-tools-as-json ((this llm) persona)
   (to-json-array
    (mapcar (lambda (tool)
              (tool:to-alist tool))
-           (tools this))))
+           (or (persona:tools persona)
+               (tools this)))))
 
 (defmethod add-history ((this llm) role content)
-  (push `((:role . ,role) (:content . ,content)) (history this)))
+  (if role
+      (push `((:role . ,role) (:content . ,content)) (history this))))
+
+(defmethod push-history ((this llm) alist)
+  (if alist
+      (push alist (history this))))
 
 (defmethod get-history ((this llm) system-prompt)
   (let* ((conversations (reverse (history this))))
@@ -91,47 +99,105 @@
 
     (handle-response this persona api-response)))
 
+(defstruct llm-output
+  (output-type)
+  (role)
+  (text)
+  (call-id)
+  (name)
+  (arguments))
+
 (defmethod handle-response ((this llm) persona api-response)
   (let* ((api-alist (cl-json:decode-json-from-string api-response))
-         (llm-response))
+         (llm-responses))
 
-    (dolist (output (alexandria:assoc-value api-alist :output) llm-response)
+    (dolist (output (alexandria:assoc-value api-alist :output))
       (let* ((result (rutils:-> (alexandria:assoc-value output :content)
                          car
                          (alexandria:assoc-value rutils:% :text)
                          sanitize)))
 
         (add-history this (alexandria:assoc-value output :role) result)
-        (setf llm-response result)))
 
-    (act-on-response this persona llm-response)))
+        (push (make-llm-output :output-type (alexandria:assoc-value output :type)
+                               :call-id (alexandria:assoc-value output :call_id)
+                               :name (alexandria:assoc-value output :name)
+                               :arguments (alexandria:assoc-value output :arguments)
+                               :role (alexandria:assoc-value output :role)
+                               :text result)
+              llm-responses)))
+
+    (act-on-llm-output this persona llm-responses)))
 
 (defun sanitize (str)
   (cl-ppcre:regex-replace-all "```(json)?" str ""))
 
+(defmethod act-on-llm-output ((this llm) persona llm-outputs)
+  (let ((funcalls-p nil))
+    (dolist (llm-output llm-outputs)
+      (cond ((string-equal "function_call" (llm-output-output-type llm-output))
+             (setf funcalls-p T)
+             (let ((result (handle-function-call
+                            this (llm-output-name llm-output)
+                            (cl-json:decode-json-from-string (llm-output-arguments llm-output)))))
+               (push-history this `((:type . :function_call_output)
+                                    (:call_id . ,(llm-output-call-id llm-output))
+                                    (:output . ,result)))))
+
+            ((string-equal "message" (llm-output-output-type llm-output))
+             (log:info (llm-output-text llm-output)))))
+
+    (if funcalls-p
+        (send-query this persona nil))))
+
+(defmethod handle-function-call ((this llm) tool-name args)
+  (dolist (tool (tools this))
+    (when (string-equal tool-name (tool:name tool))
+      (log:debug "Executing tool [name=~A, args=~A]" tool-name args)
+      (let ((tool-result (tool:tool-execute tool args)))
+        (log:debug "Tool executed [name=~A, args=~A, result=~A]" tool-name args tool-result)
+        (return-from handle-function-call tool-result)))))
+
 (defmethod act-on-response ((this llm) persona result)
-  (let ((result-alist (handler-case
+  (let (llm-response
+        (result-alist (handler-case
                           (cl-json:decode-json-from-string result)
                         (error (e)
                           (declare (ignore e))))))
 
     (if (or (null result-alist)
             (not (listp result-alist)))
-        (return-from act-on-response result))
+        (push result llm-response))
 
-   (let ((explanation (alexandria:assoc-value result-alist :explanation)))
+   (let ((explanation (alexandria:assoc-value result-alist :task--summary)))
      (when explanation
-       (return-from act-on-response explanation)))
+       (push (format nil "Explanation:~%~A" explanation) llm-response)))
 
-    (let ((tool-name (alexandria:assoc-value result-alist :name)))
-     (when tool-name
-       (let ((args (alexandria:assoc-value result-alist :arguments)))
+   ;; (let ((constraints (alexandria:assoc-value result-alist :constraints)))
+   ;;   (when constraints
+   ;;     (push constraints llm-response)))
 
-         (dolist (tool (tools this))
-           (when (string-equal tool-name (tool:name tool))
-             (log:debug "Executing tool [name=~A, args=~A]" tool-name args)
-             (let ((tool-result (tool:tool-execute tool args)))
-               (log:debug "Tool executed [name=~A, args=~A, result=~A]" tool-name args tool-result)
-               (add-history this :assistant tool-result))))
+   (let ((question (alexandria:assoc-value result-alist :question)))
+     (when question
+       (push (format nil "Question:~%~A" question) llm-response)))
 
-         (send-query this persona nil))))))
+    (log:info "LLM response: ~A"
+              (serapeum:string-join (nreverse llm-response) "\\n"))
+
+    (let* ((tools-raw (alexandria:assoc-value result-alist :tool--call))
+           (tools-alist (if (alexandria:assoc-value tools-raw :name)
+                              (list tools-raw)
+                              tools-raw)))
+      (dolist (tool-alist tools-alist)
+        (let ((tool-name (alexandria:assoc-value tool-alist :name)))
+         (when tool-name
+           (let ((args (alexandria:assoc-value tool-alist :arguments)))
+
+             (dolist (tool (tools this))
+               (when (string-equal tool-name (tool:name tool))
+                 (log:debug "Executing tool [name=~A, args=~A]" tool-name args)
+                 (let ((tool-result (tool:tool-execute tool args)))
+                   (log:debug "Tool executed [name=~A, args=~A, result=~A]" tool-name args tool-result)
+                   (add-history this :assistant tool-result))))
+
+             (send-query this persona nil))))))))

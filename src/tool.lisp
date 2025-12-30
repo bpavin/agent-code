@@ -11,12 +11,21 @@
      #:to-alist
      #:tool-execute
 
-     #:read-tool
+     #:read-many-files-tool
      #:write-tool
      #:delete-tool
-     #:bash-tool))
+     #:bash-tool
+     #:git-tool
+     #:dir-tool
+     #:grep-tool))
 
 (in-package :agent-code/src/tool)
+
+(defmacro with-error-as-result (&body body)
+  `(handler-case
+       (progn ,@body)
+     (error (e)
+       (princ-to-string e))))
 
 (defclass tool ()
     ((name :type string :accessor name)
@@ -41,22 +50,28 @@
 (defun aget (alist item)
   (alexandria:assoc-value alist item))
 
-(defclass read-tool (tool)
-  ((name :initform "read_file")
-   (description :initform "Reads a file from disk.")
-   (properties :initform '((:path . ((:type . :string)
-                                     (:description . "Absolute path of the file.")))))
-   (required :initform '(:path))))
+(defclass read-many-files-tool (tool)
+  ((name :initform "read_many_files")
+   (description :initform "Reads multiple files from the disk. Input is array of paths to read.")
+   (properties :initform '((:paths . ((:type . :array)
+                                      (:description . "Array of the absolute paths of the files.")))))
+   (required :initform '(:paths))))
 
-(defmethod tool-execute ((tool read-tool) args)
+(defmethod tool-execute ((tool read-many-files-tool) args)
   (with-error-as-result
     (if (null args)
         (error "No file specified for reading.")
-        (alexandria:read-file-into-string (aget args :path)))))
+        (with-output-to-string (out)
+          (dolist (path (aget args :paths) out)
+            (format out "----- ~A -----~%~%~A~%~%" path (read-file path)))))))
+
+(defun read-file (path)
+  (with-error-as-result
+    (alexandria:read-file-into-string path)))
 
 (defclass write-tool (tool)
   ((name :initform "write_file")
-   (description :initform "Writes content to a file on disk.")
+   (description :initform "Writes content to a file on disk. File must already exist, and it won't overwrite existing files.")
    (properties :initform '((:path . ((:type . :string)
                                      (:description . "Absolute path of the file.")))
                            (:content . ((:type . :string)
@@ -98,8 +113,55 @@
           (error "Command is not allowed ~A" "rm"))
       (uiop:run-program cmd :output '(:string :stripped t)))))
 
-(defmacro with-error-as-result (&body body)
-  `(handler-case
-       (progn ,@body)
-     (error (e)
-       (princ-to-string e))))
+(defclass git-tool (tool)
+  ((name :initform "git_command")
+   (description :initform "Invoke git commands.")
+   (properties :initform '((:command . ((:type . :string)
+                                        (:description . "Arguments of the git command.")))))
+   (required :initform '(:command))))
+
+(defmethod tool-execute ((tool git-tool) args)
+  (with-error-as-result
+    (if (null args)
+        (error "No command specified."))
+    (let* ((cmd-raw (aget args :command))
+           (cmd (if (serapeum:string-prefix-p "git" cmd-raw)
+                    cmd-raw
+                    (format nil "git ~A" cmd-raw))))
+      (if (serapeum:string-contains-p " rm " cmd)
+          (error "Command is not allowed ~A" "rm"))
+      (uiop:run-program cmd :output '(:string :stripped t)))))
+
+(defclass grep-tool (tool)
+  ((name :initform "grep_command")
+   (description :initform "Invoke grep commands.")
+   (properties :initform '((:command . ((:type . :string)
+                                        (:description . "Arguments of the grep command.")))))
+   (required :initform '(:command))))
+
+(defmethod tool-execute ((tool grep-tool) args)
+  (with-error-as-result
+    (if (null args)
+        (error "No command specified."))
+    (let* ((cmd-raw (aget args :command))
+           (cmd (if (serapeum:string-prefix-p "grep" cmd-raw)
+                    cmd-raw
+                    (format nil "grep ~A" cmd-raw))))
+      (if (serapeum:string-contains-p " rm " cmd)
+          (error "Command is not allowed ~A" "rm"))
+      (uiop:run-program cmd :output '(:string :stripped t)))))
+
+(defclass dir-tool (tool)
+  ((name :initform "dir_command")
+   (description :initform "List all files in a directory.")
+   (properties :initform '((:path . ((:type . :string)
+                                     (:description . "Absolute path of a directory.")))))
+   (required :initform '(:path))))
+
+(defmethod tool-execute ((tool dir-tool) args)
+  (with-error-as-result
+    (if (null args)
+        (error "No arguments specified."))
+    (let* ((path (aget args :path)))
+      (uiop:directory-files path))))
+

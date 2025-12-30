@@ -27,10 +27,13 @@
                     :project-path project-path
                     :project-summary (alexandria:read-file-into-string
                                       (format nil "~A/agent-code.md" project-path))
-                    :tools (list (make-instance 'tool:read-tool)
+                    :tools (list (make-instance 'tool:read-many-files-tool)
                                  (make-instance 'tool:write-tool)
+                                 (make-instance 'tool:git-tool)
+                                 (make-instance 'tool:grep-tool)
                                  ;; (make-instance 'tool:delete-tool)
-                                 (make-instance 'tool:bash-tool)))))
+                                 ;; (make-instance 'tool:bash-tool)
+                                 ))))
         (setf *ctx* this))))
 
 (defun initial-analysis ()
@@ -48,5 +51,5 @@
     (log:info "~%~A" response)))
 
 (defun ask (query)
-  (let ((response (llm:send-query *ctx* persona:coding-persona query)))
+  (let ((response (llm:send-query *ctx* persona:planning-persona query)))
     (log:info "~%~A" response)))
