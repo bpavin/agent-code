@@ -17,7 +17,7 @@
         :accessor url)
    (chat-completion :initform "/v1/responses"
                     :accessor chat-completion)
-   (model :initform "qwen3:8b"
+   (model :initform "freehuntx/qwen3-coder:8b"
           :accessor model)
    (project-path :initform nil
                  :initarg :project-path
@@ -138,7 +138,7 @@
       (cond ((string-equal "function_call" (llm-output-output-type llm-output))
              (setf funcalls-p T)
              (let ((result (handle-function-call
-                            this (llm-output-name llm-output)
+                            this persona (llm-output-name llm-output)
                             (cl-json:decode-json-from-string (llm-output-arguments llm-output)))))
                (push-history this `((:type . :function_call_output)
                                     (:call_id . ,(llm-output-call-id llm-output))
@@ -150,8 +150,8 @@
     (if funcalls-p
         (send-query this persona nil))))
 
-(defmethod handle-function-call ((this llm) tool-name args)
-  (dolist (tool (tools this))
+(defmethod handle-function-call ((this llm) persona tool-name args)
+  (dolist (tool (or (persona:tools persona) (tools this)))
     (when (string-equal tool-name (tool:name tool))
       (log:debug "Executing tool [name=~A, args=~A]" tool-name args)
       (let ((tool-result (tool:tool-execute tool args)))

@@ -136,7 +136,7 @@
   ((name :initform "grep_command")
    (description :initform "Invoke grep commands.")
    (properties :initform '((:command . ((:type . :string)
-                                        (:description . "Arguments of the grep command.")))))
+                                        (:description . "Arguments of the grep command. Paths must be absolute paths.")))))
    (required :initform '(:command))))
 
 (defmethod tool-execute ((tool grep-tool) args)
@@ -163,5 +163,4 @@
     (if (null args)
         (error "No arguments specified."))
     (let* ((path (aget args :path)))
-      (uiop:directory-files path))))
-
+      (format nil "~A" (uiop:directory-files path)))))
