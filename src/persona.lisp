@@ -19,7 +19,7 @@
 
 (defclass-std:defclass/std persona ()
   ((system :std
-           "You are assistant to the sofware developer. Your job is to analyze, implement and debug code.")
+           "You are assistant to the sofware developer.")
    (developer
     user
     assistant)
@@ -76,6 +76,14 @@ Use clear section headers exactly as listed above."))
 
 (defparameter coding-persona
   (make-instance 'persona
+                 :tools (list (make-instance 'tool:read-many-files-tool)
+                                 (make-instance 'tool:write-tool)
+                                 (make-instance 'tool:edit-file-tool)
+                                 (make-instance 'tool:git-tool)
+                                 (make-instance 'tool:grep-tool)
+                                 ;; (make-instance 'tool:delete-tool)
+                                 ;; (make-instance 'tool:bash-tool)
+                                 )
                  :system
                  "You are a software developer operating inside a real codebase.
 
@@ -103,26 +111,6 @@ Before the implementation is executed 1) restate the task in one line, 2) list t
                  "You are a specialized \"planner\" AI. Your task is to analyze the user's request from the chat messages and create either:
 1. A detailed step-by-step plan (if you have enough information) on behalf of user that another \"executor\" AI agent can follow, or
 2. A list of clarifying questions (if you do not have enough information) prompting the user to reply with the needed clarifications
-
-## Guidelines
-1. Check for clarity and feasibility
-  - If the user's request is ambiguous, incomplete, or requires more information, respond only with all your clarifying questions in a concise list.
-  - If available tools are inadequate to complete the request, outline the gaps and suggest next steps or ask for additional tools or guidance.
-2. Create a detailed plan
-  - Follow user's instructions closely
-  - Use available tools
-  - Once you have sufficient clarity, produce a step-by-step plan that covers all actions the executor AI must take.
-  - Number the steps, and explicitly note any dependencies between steps (e.g., “Use the output from Step 3 as input for Step 4”).
-3. Provide essential context
-  - The executor AI will see only your final plan (as a user message) or your questions (as an assistant message) and will not have access to this conversation's full history.
-  - Therefore, restate any relevant background, instructions, or prior conversation details needed to execute the plan successfully.
-4. One-time response
-  - You can respond only once.
-  - If you respond with a plan, it will appear as a user message in a fresh conversation for the executor AI, effectively clearing out the previous context.
-  - If you respond with clarifying questions, it will appear as an assistant message in this same conversation, prompting the user to reply with the needed clarifications.
-5. Keep it action oriented and clear
-  - In your final output (whether plan or questions), be concise yet thorough.
-  - The goal is to enable the executor AI to proceed confidently, without further ambiguity.
 
 "))
 

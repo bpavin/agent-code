@@ -135,7 +135,7 @@
         (add-history this (alexandria:assoc-value output :role) result)
 
         (push (make-llm-output :output-type (alexandria:assoc-value output :type)
-                               :call-id (alexandria:assoc-value output :call_id)
+                               :call-id (alexandria:assoc-value output :call--id)
                                :name (alexandria:assoc-value output :name)
                                :arguments (alexandria:assoc-value output :arguments)
                                :role (alexandria:assoc-value output :role)
@@ -155,8 +155,12 @@
              (let ((result (handle-function-call
                             this persona (llm-output-name llm-output)
                             (cl-json:decode-json-from-string (llm-output-arguments llm-output)))))
-               (push-history this `((:type . :function_call_output)
-                                    (:call_id . ,(llm-output-call-id llm-output))
+               (push-history this `((:type . :function--call)
+                                    (:call--id . ,(llm-output-call-id llm-output))
+                                    (:name . ,(llm-output-name llm-output))
+                                    (:arguments . ,(llm-output-arguments llm-output))))
+               (push-history this `((:type . :function--call--output)
+                                    (:call--id . ,(llm-output-call-id llm-output))
                                     (:output . ,result)))))
 
             ((string-equal "message" (llm-output-output-type llm-output))
