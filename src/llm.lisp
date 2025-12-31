@@ -8,7 +8,9 @@
      #:llm
      #:send-query
      #:project-path
-     #:project-summary))
+     #:project-summary
+     #:last-in-history
+     #:clear-history))
 
 (in-package :agent-code/src/llm)
 
@@ -31,7 +33,7 @@
           :accessor tools)))
 
 (defmethod call-chat-completion ((this llm) persona query)
-  (let* ((conversation (get-history this (persona:system persona)))
+  (let* ((conversation (get-history this persona))
          (content (format nil
                           "{
                             \"model\": ~A,
@@ -43,7 +45,7 @@
                             ],
                             \"summary\": \"concise\",
                             \"stream\": false,
-                            \"temperature\": 0.4,
+                            \"temperature\": 0.6,
                             \"max_tokens\": 1000
                           }"
                           (cl-json:encode-json-to-string (model this))
@@ -65,18 +67,31 @@
            (or (persona:tools persona)
                (tools this)))))
 
+(defmethod clear-history ((this llm))
+  (setf (history this) nil))
+
+(defmethod last-in-history ((this llm))
+  (let ((msg (pop (history this))))
+    (alexandria:assoc-value msg :content)))
+
 (defmethod add-history ((this llm) role content)
-  (if role
+  (if (and role content)
       (push `((:role . ,role) (:content . ,content)) (history this))))
 
 (defmethod push-history ((this llm) alist)
   (if alist
       (push alist (history this))))
 
-(defmethod get-history ((this llm) system-prompt)
+(defmethod get-history ((this llm) persona)
+  "Returns conversation history. History is first copied, before appending custom history items."
   (let* ((conversations (reverse (history this))))
-    (push `((:role . :system) (:content . ,system-prompt))
-          conversations)
+    (if (persona:user persona)
+        (push `((:role . :user) (:content . ,(persona:get-user-prompt persona
+                                                                      (or (persona:tools persona) (tools this)))))
+              conversations))
+    (if (persona:system persona)
+        (push `((:role . :system) (:content . ,(persona:system persona)))
+              conversations))
     (to-json-array conversations)))
 
 (defun to-json-array (lst)
@@ -155,49 +170,7 @@
     (when (string-equal tool-name (tool:name tool))
       (log:debug "Executing tool [name=~A, args=~A]" tool-name args)
       (let ((tool-result (tool:tool-execute tool args)))
-        (log:debug "Tool executed [name=~A, args=~A, result=~A]" tool-name args tool-result)
+        (log:debug "Tool executed successfully [name=~A, args=~A]" tool-name args)
+        (if (log:trace)
+            (log:trace "Tool executed [name=~A, args=~A, result=~A]" tool-name args tool-result))
         (return-from handle-function-call tool-result)))))
-
-(defmethod act-on-response ((this llm) persona result)
-  (let (llm-response
-        (result-alist (handler-case
-                          (cl-json:decode-json-from-string result)
-                        (error (e)
-                          (declare (ignore e))))))
-
-    (if (or (null result-alist)
-            (not (listp result-alist)))
-        (push result llm-response))
-
-   (let ((explanation (alexandria:assoc-value result-alist :task--summary)))
-     (when explanation
-       (push (format nil "Explanation:~%~A" explanation) llm-response)))
-
-   ;; (let ((constraints (alexandria:assoc-value result-alist :constraints)))
-   ;;   (when constraints
-   ;;     (push constraints llm-response)))
-
-   (let ((question (alexandria:assoc-value result-alist :question)))
-     (when question
-       (push (format nil "Question:~%~A" question) llm-response)))
-
-    (log:info "LLM response: ~A"
-              (serapeum:string-join (nreverse llm-response) "\\n"))
-
-    (let* ((tools-raw (alexandria:assoc-value result-alist :tool--call))
-           (tools-alist (if (alexandria:assoc-value tools-raw :name)
-                              (list tools-raw)
-                              tools-raw)))
-      (dolist (tool-alist tools-alist)
-        (let ((tool-name (alexandria:assoc-value tool-alist :name)))
-         (when tool-name
-           (let ((args (alexandria:assoc-value tool-alist :arguments)))
-
-             (dolist (tool (tools this))
-               (when (string-equal tool-name (tool:name tool))
-                 (log:debug "Executing tool [name=~A, args=~A]" tool-name args)
-                 (let ((tool-result (tool:tool-execute tool args)))
-                   (log:debug "Tool executed [name=~A, args=~A, result=~A]" tool-name args tool-result)
-                   (add-history this :assistant tool-result))))
-
-             (send-query this persona nil))))))))

@@ -25,10 +25,12 @@
   (if (or force-init-p (null *ctx*))
       (let* ((this (make-instance 'llm:llm
                     :project-path project-path
-                    :project-summary (alexandria:read-file-into-string
-                                      (format nil "~A/agent-code.md" project-path))
+                    :project-summary (if (probe-file (format nil "~A/agent-code.md" project-path))
+                                         (alexandria:read-file-into-string
+                                          (format nil "~A/agent-code.md" project-path)))
                     :tools (list (make-instance 'tool:read-many-files-tool)
-                                 (make-instance 'tool:write-tool)
+                                 ;; (make-instance 'tool:write-tool)
+                                 (make-instance 'tool:edit-file-tool)
                                  (make-instance 'tool:git-tool)
                                  (make-instance 'tool:grep-tool)
                                  ;; (make-instance 'tool:delete-tool)
@@ -50,6 +52,10 @@
   (let ((response (llm:send-query *ctx* persona:analyzing-persona query)))
     (log:info "~%~A" response)))
 
-(defun ask (query)
-  (let ((response (llm:send-query *ctx* persona:planning-persona query)))
+(defun ask (query &key (mode :plan))
+  (let* ((persona (case mode
+                    (:plan persona:planning-persona)
+                    (:implement persona:coding-persona)
+                    (:analyze persona:analyzing-persona)))
+         (response (llm:send-query *ctx* persona query)))
     (log:info "~%~A" response)))

@@ -17,7 +17,8 @@
      #:bash-tool
      #:git-tool
      #:dir-tool
-     #:grep-tool))
+     #:grep-tool
+     #:edit-file-tool))
 
 (in-package :agent-code/src/tool)
 
@@ -79,10 +80,32 @@
    (required :initform '(:path :content))))
 
 (defmethod tool-execute ((tool write-tool) args)
-  (if (< (length args) 2)
-      (error "Not enough arguments specified for writing.")
-      (with-error-as-result
+  (with-error-as-result
+    (if (< (length args) 2)
+        (error "Not enough arguments specified for writing.")
         (alexandria:write-string-into-file (aget args :content) (aget args :path)))))
+
+(defclass edit-file-tool (tool)
+  ((name :initform "edit_file")
+   (description :initform "Edit content of an existing file on the disk. .")
+   (properties :initform '((:path . ((:type . :string)
+                                     (:description . "Absolute path of the file.")))
+                           (:old-content . ((:type . :string)
+                                            (:description . "Content that will be replaced.")))
+                           (:new-content . ((:type . :string)
+                                            (:description . "New content that will overwrite the old content.")))))
+   (required :initform '(:path :old-content :new-content))))
+
+(defmethod tool-execute ((tool edit-file-tool) args)
+  (with-error-as-result
+    (if (< (length args) 3)
+        (error "Not enough arguments specified for writing.")
+        (let* ((path (aget args :path))
+               (file-content (alexandria:read-file-into-string path))
+               (file-content (serapeum:string-replace-all
+                              (aget args :old-content) file-content (aget args :new-content))))
+          (alexandria:write-string-into-file file-content path)
+          "File is edited successfully."))))
 
 (defclass delete-tool (tool)
   ((name :initform "delete_file")
@@ -144,18 +167,28 @@
     (if (null args)
         (error "No command specified."))
     (let* ((cmd-raw (aget args :command))
-           (cmd (if (serapeum:string-prefix-p "grep" cmd-raw)
+           (cmd (if (or (serapeum:string-prefix-p "grep " cmd-raw)
+                        (serapeum:string-prefix-p "find " cmd-raw))
                     cmd-raw
                     (format nil "grep ~A" cmd-raw))))
       (if (serapeum:string-contains-p " rm " cmd)
           (error "Command is not allowed ~A" "rm"))
-      (uiop:run-program cmd :output '(:string :stripped t)))))
+
+      (let ((result (uiop:run-program "cat"
+                                      :input
+                                      (uiop:process-info-output
+                                       (uiop:launch-program cmd
+                                                            :output :stream))
+                                      :output '(:string :stripped t))))
+        (if (string-equal "" result)
+            "No results."
+            result)))))
 
 (defclass dir-tool (tool)
   ((name :initform "dir_command")
    (description :initform "List all files in a directory.")
    (properties :initform '((:path . ((:type . :string)
-                                     (:description . "Absolute path of a directory.")))))
+                                     (:description . "Absolute path of a directory. Wildcards are not accepted.")))))
    (required :initform '(:path))))
 
 (defmethod tool-execute ((tool dir-tool) args)
@@ -163,4 +196,6 @@
     (if (null args)
         (error "No arguments specified."))
     (let* ((path (aget args :path)))
+      (if (not (serapeum:string-suffix-p "/" path))
+          (setf path (format nil "~A/" path)))
       (format nil "~A" (uiop:directory-files path)))))
