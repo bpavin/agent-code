@@ -18,7 +18,8 @@
      #:git-tool
      #:dir-tool
      #:grep-tool
-     #:edit-file-tool))
+     #:edit-file-tool
+     #:git-appy-patch-tool))
 
 (in-package :agent-code/src/tool)
 
@@ -104,7 +105,7 @@
                (file-content (alexandria:read-file-into-string path))
                (file-content (serapeum:string-replace-all
                               (aget args :old-content) file-content (aget args :new-content))))
-          (alexandria:write-string-into-file file-content path)
+          (alexandria:write-string-into-file file-content path :if-exists :supersede)
           "File is edited successfully."))))
 
 (defclass delete-tool (tool)
@@ -154,6 +155,27 @@
       (if (serapeum:string-contains-p " rm " cmd)
           (error "Command is not allowed ~A" "rm"))
       (uiop:run-program cmd :output '(:string :stripped t)))))
+
+(defclass git-appy-patch-tool (tool)
+  ((name :initform "git_apply_patch")
+   (project-directory :initarg :project-directory :accessor project-directory)
+   (description :initform "Apply git patch to the project.")
+   (properties :initform '((:patch . ((:type . :string)
+                                      (:description . "Git formatted patch.")))))
+   (required :initform '(:patch))))
+
+(defmethod tool-execute ((tool git-appy-patch-tool) args)
+  (with-error-as-result
+    (if (null args)
+        (error "No command specified."))
+    (let* ((patch (aget args :patch)))
+      (break)
+      (uiop:run-program (format nil "git -C ~A apply" (project-directory tool))
+                        :input
+                        (uiop:process-info-output
+                         (uiop:launch-program (format nil "printf \"%s\\n\" \"~A\"" patch)
+                                              :output :stream))
+                        :output '(:string :stripped t)))))
 
 (defclass grep-tool (tool)
   ((name :initform "grep_command")
