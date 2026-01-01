@@ -19,7 +19,7 @@
         :accessor url)
    (chat-completion :initform "/v1/responses"
                     :accessor chat-completion)
-   (model :initform "freehuntx/qwen3-coder:8b"
+   (model :initform "qwen3:8b"
           :accessor model)
    (project-path :initform nil
                  :initarg :project-path
@@ -46,7 +46,7 @@
                             \"summary\": \"concise\",
                             \"stream\": false,
                             \"temperature\": 0.6,
-                            \"max_tokens\": 1000
+                            \"max_tokens\": 2000
                           }"
                           (cl-json:encode-json-to-string (model this))
                           conversation

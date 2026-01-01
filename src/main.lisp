@@ -55,7 +55,11 @@
 (defun ask (query &key (mode :plan))
   (let* ((persona (case mode
                     (:plan persona:planning-persona)
-                    (:implement persona:coding-persona)
+                    (:implement (progn
+                                  (let* ((request (llm:last-in-history *ctx*))
+                                         (tmp (llm:clear-history *ctx*)))
+                                    (setf query request)
+                                    persona:coding-persona)))
                     (:analyze persona:analyzing-persona)))
          (response (llm:send-query *ctx* persona query)))
     (log:info "~%~A" response)))
