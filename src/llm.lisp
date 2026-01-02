@@ -152,16 +152,25 @@
     (dolist (llm-output llm-outputs)
       (cond ((string-equal "function_call" (llm-output-output-type llm-output))
              (setf funcalls-p T)
-             (let ((result (handle-function-call
-                            this persona (llm-output-name llm-output)
-                            (cl-json:decode-json-from-string (llm-output-arguments llm-output)))))
+             (let (result (success "completed"))
+
+               (handler-case
+                   (setf result
+                         (handle-function-call
+                          this persona (llm-output-name llm-output)
+                          (cl-json:decode-json-from-string (llm-output-arguments llm-output))))
+                 (error (e)
+                   (declare (ignore e))
+                   (setf success "incomplete")))
+
                (push-history this `((:type . :function--call)
                                     (:call--id . ,(llm-output-call-id llm-output))
                                     (:name . ,(llm-output-name llm-output))
                                     (:arguments . ,(llm-output-arguments llm-output))))
                (push-history this `((:type . :function--call--output)
                                     (:call--id . ,(llm-output-call-id llm-output))
-                                    (:output . ,result)))))
+                                    (:output . ,result)
+                                    (:status . ,success)))))
 
             ((string-equal "message" (llm-output-output-type llm-output))
              (log:info (llm-output-text llm-output)))))

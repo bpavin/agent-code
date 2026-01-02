@@ -23,12 +23,6 @@
 
 (in-package :agent-code/src/tool)
 
-(defmacro with-error-as-result (&body body)
-  `(handler-case
-       (progn ,@body)
-     (error (e)
-       (princ-to-string e))))
-
 (defclass tool ()
     ((name :type string :accessor name)
      (description :type string :accessor description)
@@ -60,16 +54,14 @@
    (required :initform '(:paths))))
 
 (defmethod tool-execute ((tool read-many-files-tool) args)
-  (with-error-as-result
-    (if (null args)
-        (error "No file specified for reading.")
-        (with-output-to-string (out)
-          (dolist (path (aget args :paths) out)
-            (format out "----- ~A -----~%~%~A~%~%" path (read-file path)))))))
+  (if (null args)
+      (error "No file specified for reading.")
+      (with-output-to-string (out)
+        (dolist (path (aget args :paths) out)
+          (format out "----- ~A -----~%~%~A~%~%" path (read-file path))))))
 
 (defun read-file (path)
-  (with-error-as-result
-    (alexandria:read-file-into-string path)))
+  (alexandria:read-file-into-string path))
 
 (defclass write-tool (tool)
   ((name :initform "write_file")
@@ -81,10 +73,9 @@
    (required :initform '(:path :content))))
 
 (defmethod tool-execute ((tool write-tool) args)
-  (with-error-as-result
-    (if (< (length args) 2)
-        (error "Not enough arguments specified for writing.")
-        (alexandria:write-string-into-file (aget args :content) (aget args :path)))))
+  (if (< (length args) 2)
+      (error "Not enough arguments specified for writing.")
+      (alexandria:write-string-into-file (aget args :content) (aget args :path))))
 
 (defclass edit-file-tool (tool)
   ((name :initform "edit_file")
@@ -98,15 +89,14 @@
    (required :initform '(:path :old-content :new-content))))
 
 (defmethod tool-execute ((tool edit-file-tool) args)
-  (with-error-as-result
-    (if (< (length args) 3)
-        (error "Not enough arguments specified for writing.")
-        (let* ((path (aget args :path))
-               (file-content (alexandria:read-file-into-string path))
-               (file-content (serapeum:string-replace-all
-                              (aget args :old-content) file-content (aget args :new-content))))
-          (alexandria:write-string-into-file file-content path :if-exists :supersede)
-          "File is edited successfully."))))
+  (if (< (length args) 3)
+      (error "Not enough arguments specified for writing.")
+      (let* ((path (aget args :path))
+             (file-content (alexandria:read-file-into-string path))
+             (file-content (serapeum:string-replace-all
+                            (aget args :old-content) file-content (aget args :new-content))))
+        (alexandria:write-string-into-file file-content path :if-exists :supersede)
+        "File is edited successfully.")))
 
 (defclass delete-tool (tool)
   ((name :initform "delete_file")
@@ -116,10 +106,9 @@
    (required :initform '(:path))))
 
 (defmethod tool-execute ((tool delete-tool) args)
-  (with-error-as-result
-    (if (null args)
-        (error "No file specified for deletion.")
-        (delete-file (aget args :path)))))
+  (if (null args)
+      (error "No file specified for deletion.")
+      (delete-file (aget args :path))))
 
 (defclass bash-tool (tool)
   ((name :initform "bash_command")
@@ -129,13 +118,12 @@
    (required :initform '(:command))))
 
 (defmethod tool-execute ((tool bash-tool) args)
-  (with-error-as-result
-    (if (null args)
-        (error "No command specified."))
-    (let ((cmd (aget args :command)))
-      (if (serapeum:string-contains-p " rm " cmd)
-          (error "Command is not allowed ~A" "rm"))
-      (uiop:run-program cmd :output '(:string :stripped t)))))
+  (if (null args)
+      (error "No command specified."))
+  (let ((cmd (aget args :command)))
+    (if (serapeum:string-contains-p " rm " cmd)
+        (error "Command is not allowed ~A" "rm"))
+    (uiop:run-program cmd :output '(:string :stripped t))))
 
 (defclass git-tool (tool)
   ((name :initform "git_command")
@@ -145,16 +133,15 @@
    (required :initform '(:command))))
 
 (defmethod tool-execute ((tool git-tool) args)
-  (with-error-as-result
-    (if (null args)
-        (error "No command specified."))
-    (let* ((cmd-raw (aget args :command))
-           (cmd (if (serapeum:string-prefix-p "git" cmd-raw)
-                    cmd-raw
-                    (format nil "git ~A" cmd-raw))))
-      (if (serapeum:string-contains-p " rm " cmd)
-          (error "Command is not allowed ~A" "rm"))
-      (uiop:run-program cmd :output '(:string :stripped t)))))
+  (if (null args)
+      (error "No command specified."))
+  (let* ((cmd-raw (aget args :command))
+         (cmd (if (serapeum:string-prefix-p "git" cmd-raw)
+                  cmd-raw
+                  (format nil "git ~A" cmd-raw))))
+    (if (serapeum:string-contains-p " rm " cmd)
+        (error "Command is not allowed ~A" "rm"))
+    (uiop:run-program cmd :output '(:string :stripped t))))
 
 (defclass git-appy-patch-tool (tool)
   ((name :initform "git_apply_patch")
@@ -165,17 +152,15 @@
    (required :initform '(:patch))))
 
 (defmethod tool-execute ((tool git-appy-patch-tool) args)
-  (with-error-as-result
-    (if (null args)
-        (error "No command specified."))
-    (let* ((patch (aget args :patch)))
-      (break)
-      (uiop:run-program (format nil "git -C ~A apply" (project-directory tool))
-                        :input
-                        (uiop:process-info-output
-                         (uiop:launch-program (format nil "printf \"%s\\n\" \"~A\"" patch)
-                                              :output :stream))
-                        :output '(:string :stripped t)))))
+  (if (null args)
+      (error "No command specified."))
+  (let* ((patch (aget args :patch)))
+    (uiop:run-program (format nil "git -C ~A apply" (project-directory tool))
+                      :input
+                      (uiop:process-info-output
+                       (uiop:launch-program (format nil "printf \"%s\\n\" \"~A\"" patch)
+                                            :output :stream))
+                      :output '(:string :stripped t))))
 
 (defclass grep-tool (tool)
   ((name :initform "grep_command")
@@ -185,26 +170,25 @@
    (required :initform '(:command))))
 
 (defmethod tool-execute ((tool grep-tool) args)
-  (with-error-as-result
-    (if (null args)
-        (error "No command specified."))
-    (let* ((cmd-raw (aget args :command))
-           (cmd (if (or (serapeum:string-prefix-p "grep " cmd-raw)
-                        (serapeum:string-prefix-p "find " cmd-raw))
-                    cmd-raw
-                    (format nil "grep ~A" cmd-raw))))
-      (if (serapeum:string-contains-p " rm " cmd)
-          (error "Command is not allowed ~A" "rm"))
+  (if (null args)
+      (error "No command specified."))
+  (let* ((cmd-raw (aget args :command))
+         (cmd (if (or (serapeum:string-prefix-p "grep " cmd-raw)
+                      (serapeum:string-prefix-p "find " cmd-raw))
+                  cmd-raw
+                  (format nil "grep ~A" cmd-raw))))
+    (if (serapeum:string-contains-p " rm " cmd)
+        (error "Command is not allowed ~A" "rm"))
 
-      (let ((result (uiop:run-program "cat"
-                                      :input
-                                      (uiop:process-info-output
-                                       (uiop:launch-program cmd
-                                                            :output :stream))
-                                      :output '(:string :stripped t))))
-        (if (string-equal "" result)
-            "No results."
-            result)))))
+    (let ((result (uiop:run-program "cat"
+                                    :input
+                                    (uiop:process-info-output
+                                     (uiop:launch-program cmd
+                                                          :output :stream))
+                                    :output '(:string :stripped t))))
+      (if (string-equal "" result)
+          "No results."
+          result))))
 
 (defclass dir-tool (tool)
   ((name :initform "dir_command")
@@ -214,10 +198,9 @@
    (required :initform '(:path))))
 
 (defmethod tool-execute ((tool dir-tool) args)
-  (with-error-as-result
-    (if (null args)
-        (error "No arguments specified."))
-    (let* ((path (aget args :path)))
-      (if (not (serapeum:string-suffix-p "/" path))
-          (setf path (format nil "~A/" path)))
-      (format nil "~A" (uiop:directory-files path)))))
+  (if (null args)
+      (error "No arguments specified."))
+  (let* ((path (aget args :path)))
+    (if (not (serapeum:string-suffix-p "/" path))
+        (setf path (format nil "~A/" path)))
+    (format nil "~A" (uiop:directory-files path))))

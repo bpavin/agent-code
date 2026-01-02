@@ -114,4 +114,3 @@ Think about the problem.
 Output:
 - Numbered list of steps or list of clarifying questions
 "))
-
