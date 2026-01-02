@@ -6,6 +6,7 @@
   (:import-from :rutils)
   (:import-from :serapeum)
   (:import-from :agent-code/src/llm)
+  (:import-from :agent-code/src/api-provider)
   (:import-from :agent-code/src/tool)
   (:export
    #:main
@@ -28,6 +29,7 @@
                     :project-summary (if (probe-file (format nil "~A/agent-code.md" project-path))
                                          (alexandria:read-file-into-string
                                           (format nil "~A/agent-code.md" project-path)))
+                    :api-provider (make-instance 'api-provider:chat-completion-api-provider)
                     :tools (list (make-instance 'tool:read-many-files-tool)
                                  ;; (make-instance 'tool:write-tool)
                                  (make-instance 'tool:git-appy-patch-tool :project-directory project-path)
@@ -55,6 +57,7 @@
 
 (defun ask (query &key (mode :plan))
   (let* ((persona (case mode
+                    (:base persona:base-persona)
                     (:plan persona:planning-persona)
                     (:implement (progn
                                   (let* ((request (llm:last-in-history *ctx*))

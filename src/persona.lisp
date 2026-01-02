@@ -11,6 +11,7 @@
      #:assistant
      #:tools
 
+     #:base-persona
      #:analyzing-persona
      #:coding-persona
      #:planning-persona))
@@ -36,7 +37,13 @@
                    tools)
            #\NewLine)))
 
-  (defparameter analyzing-persona
+(defparameter base-persona
+  (make-instance 'persona
+                 :system
+                 "You are helpfull assistant."
+                 ))
+
+(defparameter analyzing-persona
   (make-instance 'persona
                  :system
                  "You are analyzing the following codebase.
@@ -77,13 +84,13 @@ Use clear section headers exactly as listed above."))
 (defparameter coding-persona
   (make-instance 'persona
                  :tools (list (make-instance 'tool:read-many-files-tool)
-                                 (make-instance 'tool:write-tool)
-                                 (make-instance 'tool:edit-file-tool)
-                                 ;; (make-instance 'tool:git-tool)
-                                 (make-instance 'tool:grep-tool)
-                                 ;; (make-instance 'tool:delete-tool)
-                                 ;; (make-instance 'tool:bash-tool)
-                                 )
+                              (make-instance 'tool:write-tool)
+                              (make-instance 'tool:edit-file-tool)
+                              ;; (make-instance 'tool:git-tool)
+                              (make-instance 'tool:grep-tool)
+                              ;; (make-instance 'tool:delete-tool)
+                              ;; (make-instance 'tool:bash-tool)
+                              )
                  :user
                  "You are a software developer operating inside a real codebase.
 

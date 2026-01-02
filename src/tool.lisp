@@ -7,6 +7,7 @@
      #:name
      #:description
      #:properties
+     #:required
 
      #:to-alist
      #:tool-execute
