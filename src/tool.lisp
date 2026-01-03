@@ -84,7 +84,7 @@
    (properties :initform '((:path . ((:type . :string)
                                      (:description . "Absolute path of the file.")))
                            (:old-content . ((:type . :string)
-                                            (:description . "Content that will be replaced.")))
+                                            (:description . "Content that exists in the file and that will be replaced.")))
                            (:new-content . ((:type . :string)
                                             (:description . "New content that will overwrite the old content.")))))
    (required :initform '(:path :old-content :new-content))))
@@ -93,10 +93,16 @@
   (if (< (length args) 3)
       (error "Not enough arguments specified for writing.")
       (let* ((path (aget args :path))
-             (file-content (alexandria:read-file-into-string path))
-             (file-content (serapeum:string-replace-all
-                            (aget args :old-content) file-content (aget args :new-content))))
-        (alexandria:write-string-into-file file-content path :if-exists :supersede)
+             (old-content (aget args :old-content))
+             (original-file-content (alexandria:read-file-into-string path))
+             (edited-file-content (serapeum:string-replace-all
+                                   old-content original-file-content (aget args :new-content))))
+        (if (= (length original-file-content)
+               (length edited-file-content))
+            (if (search old-content original-file-content)
+                (error "Old content was not found in the file.")
+                (error "Edit failed. No changes were applied to the file.")))
+        (alexandria:write-string-into-file edited-file-content path :if-exists :supersede)
         "File is edited successfully.")))
 
 (defclass delete-tool (tool)
@@ -124,7 +130,10 @@
   (let ((cmd (aget args :command)))
     (if (serapeum:string-contains-p " rm " cmd)
         (error "Command is not allowed ~A" "rm"))
-    (uiop:run-program cmd :output '(:string :stripped t))))
+    (let ((output (uiop:run-program cmd :output '(:string :stripped t))))
+      (if (string-equal "" output)
+          "Success, but output is empty."
+          output))))
 
 (defclass git-tool (tool)
   ((name :initform "git_command")

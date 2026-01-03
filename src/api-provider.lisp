@@ -128,7 +128,7 @@
                 \"summary\": \"concise\",
                 \"stream\": false,
                 \"temperature\": 0.6,
-                \"max_tokens\": 2000
+                \"max_output_tokens\": 2000
           }"
           (cl-json:encode-json-to-string model)
           conversation
@@ -173,12 +173,18 @@
   (if str (cl-json:decode-json-from-string str)))
 
 (defmethod create-response ((this responses-api-provider) llm-response)
-  (case (llm-response:output-type llm-response)
-    (:function--call--output
-     `((:role . :assistant)
-       (:content . ,(cl-json:encode-json-alist-to-string
-                     `((:type . :function)
-                       (:name . ,(llm-response:name llm-response))
-                       (:parameters . ,(llm-response:arguments llm-response))
-                       (:output . ,(llm-response:text llm-response))
-                       (:success . ,(llm-response:status llm-response)))))))))
+  (let ((out-type (llm-response:output-type llm-response)))
+    (if (stringp out-type)
+        (alexandria:switch (out-type :test #'string-equal)
+          ("function_call"
+           `((:type . :function--call)
+             (:call--id . ,(llm-response:call-id llm-response))
+             (:name . ,(llm-response:name llm-response))
+             (:arguments . ,(cl-json:encode-json-alist-to-string (llm-response:arguments llm-response))))))
+
+        (case (llm-response:output-type llm-response)
+          (:function--call--output
+           `((:type . :function--call--output)
+             (:call--id . ,(llm-response:call-id llm-response))
+             (:output . ,(llm-response:text llm-response))
+             (:status . ,(llm-response:status llm-response))))))))
