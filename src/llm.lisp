@@ -17,14 +17,13 @@
 (in-package :agent-code/src/llm)
 
 (defclass llm ()
-  ((url :initform "http://localhost:11434"
-        :accessor url)
+  ((host :initform "http://localhost:11434"
+        :accessor host)
    (model :initform "qwen3:8b"
           :accessor model)
-   (chat-completion :initform "/v1/chat/completions"
-                    :accessor chat-completion)
-   (responses :initform "/v1/responses"
-                    :accessor responses)
+   (tools-enabled-p :initarg :tools-enabled-p
+                    :initform t
+                    :accessor tools-enabled-p)
    (project-path :initform nil
                  :initarg :project-path
                  :accessor project-path)
@@ -48,46 +47,15 @@
 
     (request-post this content)))
 
-(defmethod call-responses ((this llm) persona query)
-  (let* ((conversation (get-history this persona))
-         (content (format nil
-                          "{
-                            \"model\": ~A,
-                            \"input\": [
-                                ~A
-                            ],
-                            \"tools\": [
-                                ~A
-                            ],
-                            \"summary\": \"concise\",
-                            \"stream\": false,
-                            \"temperature\": 0.6,
-                            \"max_tokens\": 2000
-                          }"
-                          (cl-json:encode-json-to-string (model this))
-                          conversation
-                          (responses-tools-as-json this persona))))
-
-    (request-post this content)))
-
-(defmethod responses-tools-as-json ((this llm) persona)
-  (to-json-array
-   (mapcar (lambda (tool)
-             (tool:to-alist tool))
-           (or (persona:tools persona)
-               (tools this)))))
-
 (defun request-post (this content)
     (when (log:debug)
       (log:debug content))
 
-  (dex:post (format nil "~A~A" (url this) (chat-completion this))
+  (dex:post (format nil "~A~A" (host this) (api-provider:url (api-provider this)))
               :insecure t
               :read-timeout 60000
               :headers '(("Content-type" . "application/json"))
               :content content))
-
-
 
 (defmethod clear-history ((this llm))
   (setf (history this) nil))
@@ -108,8 +76,9 @@
   "Returns conversation history. History is first copied, before appending custom history items."
   (let* ((conversations (reverse (history this))))
     (if (persona:user persona)
-        (push `((:role . :user) (:content . ,(persona:get-user-prompt persona
-                                                                      (or (persona:tools persona) (tools this)))))
+        (push `((:role . :user) (:content . ,(persona:get-user-prompt
+                                              persona
+                                              (or (persona:tools persona) (tools this)))))
               conversations))
     (if (persona:system persona)
         (push `((:role . :system) (:content . ,(persona:system persona)))
@@ -125,7 +94,8 @@
   (when (null (history this))
     (add-history this :assistant (format nil "Project directory is ~A" (project-path this)))
     (add-history this :assistant (project-summary this))
-    (add-history this :assistant (format nil "Available tools:~%~%~A" (responses-tools-as-json this persona))))
+    (if (not (tools-enabled-p this))
+        (add-history this :assistant (format nil "Available tools:~%~%~A" (responses-tools-as-json this persona)))))
 
   (when query
     (add-history this :user query))
@@ -139,31 +109,11 @@
 
       (act-on-llm-response this persona llm-responses))))
 
-(defmethod handle-response ((this llm) persona api-response)
-  (let* ((api-alist (cl-json:decode-json-from-string api-response))
-         (llm-responses))
-
-    (dolist (output (alexandria:assoc-value api-alist :output))
-      (let* ((result (rutils:-> (alexandria:assoc-value output :content)
-                         car
-                         (alexandria:assoc-value rutils:% :text)
-                         sanitize)))
-
-        (add-history this (alexandria:assoc-value output :role) result)
-
-        (push (make-instance 'llm-response:llm-response
-                             :output-type (alexandria:assoc-value output :type)
-                             :call-id (alexandria:assoc-value output :call--id)
-                             :name (alexandria:assoc-value output :name)
-                             :arguments (alexandria:assoc-value output :arguments)
-                             :role (alexandria:assoc-value output :role)
-                             :text result)
-              llm-responses)))
-
-    (act-on-llm-response this persona llm-responses)))
-
-(defun sanitize (str)
-  (cl-ppcre:regex-replace-all "```(json)?" str ""))
+(defmethod responses-tools-as-json ((this llm) persona)
+  (to-json-array
+   (mapcar (lambda (tool)
+             (tool:to-alist tool))
+           (or (tools persona) (tools this)))))
 
 (defmethod act-on-llm-response ((this llm) persona llm-responses)
   (let ((funcalls-p nil))

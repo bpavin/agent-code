@@ -29,7 +29,7 @@
                     :project-summary (if (probe-file (format nil "~A/agent-code.md" project-path))
                                          (alexandria:read-file-into-string
                                           (format nil "~A/agent-code.md" project-path)))
-                    :api-provider (make-instance 'api-provider:chat-completion-api-provider)
+                    :api-provider (make-instance 'api-provider:responses-api-provider)
                     :tools (list (make-instance 'tool:read-many-files-tool)
                                  ;; (make-instance 'tool:write-tool)
                                  (make-instance 'tool:git-appy-patch-tool :project-directory project-path)
