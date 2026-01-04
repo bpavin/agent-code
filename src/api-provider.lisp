@@ -40,7 +40,7 @@
                 \"summary\": \"concise\",
                 \"stream\": false,
                 \"temperature\": 0.6,
-                \"max_tokens\": 2000
+                \"max_tokens\": 20000
             }"
           (cl-json:encode-json-to-string model)
           conversation
@@ -128,7 +128,7 @@
                 \"summary\": \"concise\",
                 \"stream\": false,
                 \"temperature\": 0.6,
-                \"max_output_tokens\": 2000
+                \"max_output_tokens\": 20000
           }"
           (cl-json:encode-json-to-string model)
           conversation

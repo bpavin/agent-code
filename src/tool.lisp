@@ -20,7 +20,7 @@
      #:dir-tool
      #:grep-tool
      #:edit-file-tool
-     #:git-appy-patch-tool))
+     #:patch-tool))
 
 (in-package :agent-code/src/tool)
 
@@ -75,8 +75,9 @@
 
 (defmethod tool-execute ((tool write-tool) args)
   (if (< (length args) 2)
-      (error "Not enough arguments specified for writing.")
-      (alexandria:write-string-into-file (aget args :content) (aget args :path))))
+      (error "Not enough arguments specified for writing."))
+  (alexandria:write-string-into-file (aget args :content) (aget args :path))
+  "Success, file is written.")
 
 (defclass edit-file-tool (tool)
   ((name :initform "edit_file")
@@ -153,24 +154,57 @@
         (error "Command is not allowed ~A" "rm"))
     (uiop:run-program cmd :output '(:string :stripped t))))
 
-(defclass git-appy-patch-tool (tool)
-  ((name :initform "git_apply_patch")
+(defclass patch-tool (tool)
+  ((name :initform "patch_file")
    (project-directory :initarg :project-directory :accessor project-directory)
-   (description :initform "Apply git patch to the project.")
-   (properties :initform '((:patch . ((:type . :string)
-                                      (:description . "Git formatted patch.")))))
-   (required :initform '(:patch))))
+   (description :initform "Apply diff with a patch command to the file.")
+   (properties :initform '((:project-dir . ((:type . :string)
+                                            (:description . "Absolute path of the project's directory.")))
+                           (:diff . ((:type . :string)
+                                     (:description . "Diff formatted as a `diff` command. Use `diff` unified format:
+### **Example Unified diff snippet**
 
-(defmethod tool-execute ((tool git-appy-patch-tool) args)
+--- a/hello.txt
++++ b/hello.txt
+@@ -1,3 +1,3 @@
+-Hello world
+-This is a test
++Hello world!
++This is a simple test
+ Goodbye
+
+What the parts mean
+
+--- a/hello.txt → original file
++++ b/hello.txt → new file
+@@ -<old start>,<old count + 1> +<new start>,<new count + 1> @@ → hunk header (lines affected, line count must be incremented by 1)
+Lines starting with - were removed
+Lines starting with + were added
+Lines without a prefix are unchanged
+")))))
+   (required :initform '(:project-dir :diff))))
+
+(defmethod tool-execute ((tool patch-tool) args)
   (if (null args)
       (error "No command specified."))
-  (let* ((patch (aget args :patch)))
-    (uiop:run-program (format nil "git -C ~A apply" (project-directory tool))
-                      :input
-                      (uiop:process-info-output
-                       (uiop:launch-program (format nil "printf \"%s\\n\" \"~A\"" patch)
-                                            :output :stream))
-                      :output '(:string :stripped t))))
+  (let* ((diff (aget args :diff)))
+    (if (null diff)
+        (error "Argument diff is not specified."))
+    (let ((cmd
+            (format nil "patch --strip=1 -d ~A <<'EOF'~%~A~%EOF"
+                    (or (aget args :project-dir)
+                        (project-directory tool))
+                    diff)))
+      (log:trace cmd)
+      (multiple-value-bind (out err)
+          (uiop:run-program cmd
+                         :ignore-error-status t
+
+                         :error-output :string
+                         :output :string)
+        (if err
+            (error err)
+            out)))))
 
 (defclass grep-tool (tool)
   ((name :initform "grep_command")

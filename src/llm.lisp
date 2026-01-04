@@ -168,7 +168,9 @@
     (when (string-equal tool-name (tool:name tool))
       (log:debug "Executing tool [name=~A, args=~A]" tool-name args)
       (let ((tool-result (tool:tool-execute tool args)))
-        (log:debug "Tool executed successfully [name=~A, args=~A]" tool-name args)
+
         (if (log:trace)
-            (log:trace "Tool executed [name=~A, args=~A, result=~A]" tool-name args tool-result))
+            (log:trace "Tool executed [name=~A, args=~A, result=~A]" tool-name args tool-result)
+            (log:debug "Tool executed successfully [name=~A, args=~A]" tool-name args))
+
         (return-from handle-function-call tool-result)))))
