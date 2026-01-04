@@ -1,8 +1,7 @@
-(defpackage llm-local/tests/main
+(defpackage :agent-code/tests/main
   (:use :cl
-        :llm-local
         :rove))
-(in-package :llm-local/tests/main)
+(in-package :agent-code/tests/main)
 
 ;; NOTE: To run this test file, execute `(asdf:test-system :llm-local)' in your Lisp.
 

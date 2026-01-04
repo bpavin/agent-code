@@ -32,12 +32,12 @@
                     :api-provider (make-instance 'api-provider:responses-api-provider)
                     :tools (list (make-instance 'tool:read-many-files-tool)
                                  ;; (make-instance 'tool:write-tool)
-                                 (make-instance 'tool:git-appy-patch-tool :project-directory project-path)
+                                 ;; (make-instance 'tool:git-appy-patch-tool :project-directory project-path)
                                  ;; (make-instance 'tool:edit-file-tool)
                                  ;; (make-instance 'tool:git-tool)
-                                 (make-instance 'tool:grep-tool)
+                                 ;; (make-instance 'tool:grep-tool)
                                  ;; (make-instance 'tool:delete-tool)
-                                 ;; (make-instance 'tool:bash-tool)
+                                 (make-instance 'tool:bash-tool)
                                  ))))
         (setf *ctx* this))))
 
@@ -56,6 +56,8 @@
     (log:info "~%~A" response)))
 
 (defun ask (query &key (mode :plan))
+  (setf query (append-file-content query))
+
   (let* ((persona (case mode
                     (:base persona:base-persona)
                     (:plan persona:planning-persona)
@@ -67,3 +69,12 @@
                     (:analyze persona:analyzing-persona)))
          (response (llm:send-query *ctx* persona query)))
     (log:info "~%~A" response)))
+
+(defun append-file-content (query)
+  (if query
+      (cl-ppcre:do-register-groups (file-path) ("@([^\\s]+)" query)
+        (setf query
+              (format nil "~A~% ----- ~A -----~%~A~%~%"
+                      query file-path (alexandria:read-file-into-string file-path)))))
+
+  query)
