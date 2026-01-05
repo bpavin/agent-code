@@ -122,7 +122,7 @@
   ((name :initform "bash_command")
    (description :initform "Invoke any bash command.")
    (properties :initform '((:command . ((:type . :string)
-                                        (:description . "Command and arguments of the bash command.")))))
+                                        (:description . "Command and arguments of the bash command. Include cd of the directory you want to work with.")))))
    (required :initform '(:command))))
 
 (defmethod tool-execute ((tool bash-tool) args)
