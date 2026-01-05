@@ -39,7 +39,7 @@
                 ~A
                 \"summary\": \"concise\",
                 \"stream\": false,
-                \"temperature\": 0.8,
+                \"temperature\": 0.6,
                 \"max_tokens\": 20000
             }"
           (cl-json:encode-json-to-string model)
@@ -133,7 +133,7 @@
                 ~A
                 \"summary\": \"concise\",
                 \"stream\": false,
-                \"temperature\": 0.8,
+                \"temperature\": 0.6,
                 \"max_output_tokens\": 20000
           }"
           (cl-json:encode-json-to-string model)
