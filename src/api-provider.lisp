@@ -79,14 +79,15 @@
                (alexandria:assoc-value message-alist :content)))
 
         (dolist (json-alist (extract-jsons result))
-          (let ((json-type (alexandria:assoc-value json-alist :type)))
-            (when (or (string-equal json-type "function")
-                      (alexandria:assoc-value json-alist :parameters))
-              (push (make-instance 'llm-response:llm-response
-                                   :output-type "function"
-                                   :name (alexandria:assoc-value json-alist :name)
-                                   :arguments (alexandria:assoc-value json-alist :parameters))
-                    llm-responses))))
+          (if json-alist
+              (let ((json-type (alexandria:assoc-value json-alist :type)))
+                (when (or (string-equal json-type "function")
+                          (alexandria:assoc-value json-alist :parameters))
+                  (push (make-instance 'llm-response:llm-response
+                                       :output-type "function"
+                                       :name (alexandria:assoc-value json-alist :name)
+                                       :arguments (alexandria:assoc-value json-alist :parameters))
+                        llm-responses)))))
 
         (push (make-instance 'llm-response:llm-response
                              :output-type "message"
@@ -101,7 +102,12 @@
   (let (results)
     (cl-ppcre:do-register-groups (raw-json) ("```json([^`]*)?```" str)
       (push (cl-json:decode-json-from-string raw-json) results))
-    (nreverse results)))
+    (if (null results)
+        (handler-case
+            (list (cl-json:decode-json-from-string str))
+          (error (e)
+            (log:warn "Invalid JSON: ~A" e)))
+        (nreverse results))))
 
 (defmethod create-response ((this chat-completion-api-provider) llm-response)
   (case (llm-response:output-type llm-response)

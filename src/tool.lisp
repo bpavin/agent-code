@@ -237,14 +237,15 @@ Lines without a prefix are unchanged
   (let* ((path (aget args :path)))
     (if (not (serapeum:string-suffix-p "/" path))
         (setf path (format nil "~A/" path)))
-    (format nil "~A" (uiop:directory-files path))))
+    (let ((files (uiop:directory-files path)))
+      (format nil "~A" files))))
 
 (defun call-system-shell (cmd)
-  (multiple-value-bind (out err)
+  (multiple-value-bind (out err code)
       (uiop:run-program cmd
                         :ignore-error-status t
                         :error-output :string
                         :output :string)
-    (if (and err (not (string-equal "" err)))
+    (if (and (> code 0) err (not (string-equal "" err)))
         (error err)
         out)))
