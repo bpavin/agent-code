@@ -134,20 +134,12 @@
                    (setf result (format nil "~A" e)
                          success "incomplete")))
 
-               ;; (push-history this `((:type . :function--call)
-               ;;                      (:call--id . ,(llm-response:call-id llm-response))
-               ;;                      (:name . ,(llm-response:name llm-response))
-               ;;                      (:arguments . ,(llm-response:arguments llm-response))))
-               ;; (push-history this `((:type . :function--call--output)
-               ;;                      (:call--id . ,(llm-response:call-id llm-response))
-               ;;                      (:output . ,result)
-               ;;                      (:status . ,success)))
-
                (push-history this (api-provider:create-response (api-provider this) llm-response))
                (push-history this (api-provider:create-response
                                    (api-provider this)
                                    (make-instance 'llm-response:llm-response
                                                   :output-type :function--call--output
+                                                  :call-id (llm-response:call-id llm-response)
                                                   :name (llm-response:name llm-response)
                                                   :arguments (llm-response:arguments llm-response)
                                                   :status success

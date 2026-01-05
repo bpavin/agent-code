@@ -111,12 +111,15 @@ Rules:
   (make-instance 'persona
                  :tools (list (make-instance 'tool:read-many-files-tool)
                               (make-instance 'tool:dir-tool)
-                              (make-instance 'tool:grep-tool))
+                              (make-instance 'tool:grep-tool)
+                              (make-instance 'tool:bash-tool))
                  :user
                  "You are a specialized \"planner\" AI. Your task is to analyze the user's request from the chat messages and create either:
 1. A detailed step-by-step plan (if you have enough information) on behalf of user that another \"executor\" AI agent can follow, or
 2. A list of clarifying questions (if you do not have enough information) prompting the user to reply with the needed clarifications
 
+Always assume that user is asking about the current project.
+Prefer the use of tools to answer ambiguous questions before asking clarifying questions.
 Think about the problem.
 
 Output:

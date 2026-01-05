@@ -51,7 +51,7 @@
   ((name :initform "read_many_files")
    (description :initform "Reads multiple files from the disk. Input is array of paths to read.")
    (properties :initform '((:paths . ((:type . :array)
-                                      (:description . "Array of the absolute paths of the files.")))))
+                                      (:description . "Array of the absolute paths of the files. Directories are not allowed. Wildcards are not allowed.")))))
    (required :initform '(:paths))))
 
 (defmethod tool-execute ((tool read-many-files-tool) args)
@@ -131,10 +131,8 @@
   (let ((cmd (aget args :command)))
     (if (serapeum:string-contains-p " rm " cmd)
         (error "Command is not allowed ~A" "rm"))
-    (let ((output (uiop:run-program cmd :output '(:string :stripped t))))
-      (if (string-equal "" output)
-          "Success, but output is empty."
-          output))))
+
+    (call-system-shell cmd)))
 
 (defclass git-tool (tool)
   ((name :initform "git_command")
@@ -196,15 +194,7 @@ Lines without a prefix are unchanged
                         (project-directory tool))
                     diff)))
       (log:trace cmd)
-      (multiple-value-bind (out err)
-          (uiop:run-program cmd
-                         :ignore-error-status t
-
-                         :error-output :string
-                         :output :string)
-        (if err
-            (error err)
-            out)))))
+      (call-system-shell cmd))))
 
 (defclass grep-tool (tool)
   ((name :initform "grep_command")
@@ -248,3 +238,13 @@ Lines without a prefix are unchanged
     (if (not (serapeum:string-suffix-p "/" path))
         (setf path (format nil "~A/" path)))
     (format nil "~A" (uiop:directory-files path))))
+
+(defun call-system-shell (cmd)
+  (multiple-value-bind (out err)
+      (uiop:run-program cmd
+                        :ignore-error-status t
+                        :error-output :string
+                        :output :string)
+    (if (and err (not (string-equal "" err)))
+        (error err)
+        out)))
