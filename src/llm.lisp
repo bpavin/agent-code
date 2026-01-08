@@ -39,16 +39,17 @@
 
 (defmethod send-query ((this llm) persona query)
   (when (null (history this))
-    (add-history this :assistant (format nil "Project directory is ~A" (project-path this)))
-    (add-history this :assistant (project-summary this))
-    (if (not (tools-enabled-p this))
-        (add-history
-         this
-         :assistant (format nil "Available tools. Must be called in JSON format. Wrap it in JSON fences. This are tool descriptions but also a format it is expected:~%~%~A"
-                            (responses-tools-as-json this persona)))))
 
-  (when query
-    (add-history this :user query))
+    (add-history this (llm-response:create-message
+                       :assistant (format nil "Project directory is ~A" (project-path this))))
+    (add-history this (llm-response:create-message
+                       :assistant (project-summary this)))
+    (if (not (tools-enabled-p this))
+        (add-history this (llm-response:create-message
+                           :assistant (format nil "Available tools. Must be called in JSON format. Wrap it in JSON fences. This are tool descriptions but also a format it is expected:~%~%~A"
+                                              (responses-tools-as-json this persona))))))
+
+  (add-history this (llm-response:create-message :user query))
 
   (let* ((api-response (call-chat-completion this persona query)))
 
@@ -71,14 +72,15 @@
     (request-post this content)))
 
 (defun request-post (this content)
-    (when (log:debug)
-      (log:debug content))
+  (let ((url (format nil "~A~A" (host this) (api-provider:url (api-provider this)))))
+   (when (log:debug)
+     (log:debug "~A~%~A" url content))
 
-  (dex:post (format nil "~A~A" (host this) (api-provider:url (api-provider this)))
-              :insecure t
-              :read-timeout 60000
-              :headers '(("Content-type" . "application/json"))
-              :content content))
+   (dex:post url
+             :insecure t
+             :read-timeout 60000
+             :headers '(("Content-type" . "application/json"))
+             :content content)))
 
 (defmethod clear-history ((this llm))
   (setf (history this) nil))
@@ -87,17 +89,14 @@
   (let ((msg (pop (history this))))
     (alexandria:assoc-value msg :content)))
 
-(defmethod add-history ((this llm) role content)
-  (if (and role content)
-      (push `((:role . ,role) (:content . ,content)) (history this))))
-
-(defmethod push-history ((this llm) alist)
-  (if alist
-      (push alist (history this))))
+(defmethod add-history ((this llm) llm-response)
+  (if llm-response
+      (push llm-response (history this))))
 
 (defmethod get-history ((this llm) persona)
   "Returns conversation history. History is first copied, before appending custom history items."
-  (let* ((conversations (reverse (history this))))
+  (let* ((conversations (mapcar (alexandria:curry #'api-provider:create-response (api-provider this))
+                                (reverse (history this)))))
     (if (persona:user persona)
         (push `((:role . :user) (:content . ,(persona:get-user-prompt
                                               persona
@@ -138,22 +137,13 @@
                    (setf result (format nil "~A" e)
                          success "incomplete")))
 
-               (push-history this (api-provider:create-response (api-provider this) llm-response))
-               (push-history this (api-provider:create-response
-                                   (api-provider this)
-                                   (make-instance 'llm-response:llm-response
-                                                  :output-type :function--call--output
-                                                  :call-id (llm-response:call-id llm-response)
-                                                  :name (llm-response:name llm-response)
-                                                  :arguments (llm-response:arguments llm-response)
-                                                  :status success
-                                                  :text result)))
-               ))
+               (add-history this llm-response)
+               (add-history this
+                             (llm-response:create-function-output
+                              llm-response success result))))
 
             ((string-equal "message" (llm-response:output-type llm-response))
-             (add-history this
-                          (llm-response:role llm-response)
-                          (llm-response:text llm-response))
+             (add-history this llm-response)
              (log:info (llm-response:text llm-response)))))
 
     (if funcalls-p

@@ -78,6 +78,14 @@
              (result
                (alexandria:assoc-value message-alist :content)))
 
+        (dolist (tool-alist (alexandria:assoc-value message-alist :tool--calls))
+          (let ((fn-info (alexandria:assoc-value tool-alist :function)))
+            (push (make-instance 'llm-response:llm-response
+                                 :output-type "function"
+                                 :name (alexandria:assoc-value fn-info :name)
+                                 :arguments (alexandria:assoc-value fn-info :arguments))
+                  llm-responses)))
+
         (dolist (json-alist (extract-jsons result))
           (if json-alist
               (let ((json-type (alexandria:assoc-value json-alist :type)))
@@ -89,29 +97,29 @@
                                        :arguments (alexandria:assoc-value json-alist :parameters))
                         llm-responses)))))
 
-        (push (make-instance 'llm-response:llm-response
-                             :output-type "message"
-                             :name "message"
-                             :role (alexandria:assoc-value message-alist :role)
-                             :text result)
+        (push (llm-response:create-message (alexandria:assoc-value message-alist :role) result)
               llm-responses)))
 
     llm-responses))
 
 (defun extract-jsons (str)
-  (let (results)
-    (cl-ppcre:do-register-groups (raw-json) ("```json([^`]*)?```" str)
-      (push (cl-json:decode-json-from-string raw-json) results))
-    (if (null results)
-        (handler-case
-            (list (cl-json:decode-json-from-string str))
-          (error (e)
-            (log:warn "Invalid JSON: ~A" e)))
-        (nreverse results))))
+  (if (not (string-equal "" str))
+      (let (results)
+        (cl-ppcre:do-register-groups (raw-json) ("```json([^`]*)?```" str)
+          (push (cl-json:decode-json-from-string raw-json) results))
+        (if (null results)
+            (handler-case
+                (list (cl-json:decode-json-from-string str))
+              (error (e)
+                (log:warn "Invalid JSON: ~A" e)))
+            (nreverse results)))))
 
 (defmethod create-response ((this chat-completion-api-provider) llm-response)
-  (case (llm-response:output-type llm-response)
-    (:function--call--output
+  (alexandria:switch ((llm-response:output-type llm-response) :test #'string-equal)
+    ("message"
+     `((:role . ,(llm-response:role llm-response))
+       (:content . ,(llm-response:text llm-response))))
+    ("function_call_output"
      `((:role . :assistant)
        (:content . ,(cl-json:encode-json-alist-to-string
                      `((:type . :function)
@@ -182,14 +190,15 @@
   (let ((out-type (llm-response:output-type llm-response)))
     (if (stringp out-type)
         (alexandria:switch (out-type :test #'string-equal)
+          ("message"
+           `((:role . ,(llm-response:role llm-response))
+             (:content . ,(llm-response:text llm-response))))
           ("function_call"
            `((:type . :function--call)
              (:call--id . ,(llm-response:call-id llm-response))
              (:name . ,(llm-response:name llm-response))
-             (:arguments . ,(cl-json:encode-json-alist-to-string (llm-response:arguments llm-response))))))
-
-        (case (llm-response:output-type llm-response)
-          (:function--call--output
+             (:arguments . ,(cl-json:encode-json-alist-to-string (llm-response:arguments llm-response)))))
+          ("function_call_output"
            `((:type . :function--call--output)
              (:call--id . ,(llm-response:call-id llm-response))
              (:output . ,(llm-response:text llm-response))
