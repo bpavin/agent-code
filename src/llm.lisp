@@ -37,6 +37,28 @@
    (tools :initarg :tools
           :accessor tools)))
 
+(defmethod send-query ((this llm) persona query)
+  (when (null (history this))
+    (add-history this :assistant (format nil "Project directory is ~A" (project-path this)))
+    (add-history this :assistant (project-summary this))
+    (if (not (tools-enabled-p this))
+        (add-history
+         this
+         :assistant (format nil "Available tools. Must be called in JSON format. Wrap it in JSON fences. This are tool descriptions but also a format it is expected:~%~%~A"
+                            (responses-tools-as-json this persona)))))
+
+  (when query
+    (add-history this :user query))
+
+  (let* ((api-response (call-chat-completion this persona query)))
+
+    (when (log:debug)
+      (log:debug "LLM response: ~A" api-response))
+
+    (let ((llm-responses (api-provider:handle-response (api-provider this) api-response)))
+
+      (act-on-llm-response this persona llm-responses))))
+
 (defmethod call-chat-completion ((this llm) persona query)
   (let* ((conversation (get-history this persona))
          (content (api-provider:create-request
@@ -90,28 +112,6 @@
   (serapeum:string-join
    (mapcar #'cl-json:encode-json-alist-to-string lst)
    ","))
-
-(defmethod send-query ((this llm) persona query)
-  (when (null (history this))
-    (add-history this :assistant (format nil "Project directory is ~A" (project-path this)))
-    (add-history this :assistant (project-summary this))
-    (if (not (tools-enabled-p this))
-        (add-history
-         this
-         :assistant (format nil "Available tools. Must be called in JSON format. Wrap it in JSON fences. This are tool descriptions but also a format it is expected:~%~%~A"
-                            (responses-tools-as-json this persona)))))
-
-  (when query
-    (add-history this :user query))
-
-  (let* ((api-response (call-chat-completion this persona query)))
-
-    (when (log:debug)
-      (log:debug "LLM response: ~A" api-response))
-
-    (let ((llm-responses (api-provider:handle-response (api-provider this) api-response)))
-
-      (act-on-llm-response this persona llm-responses))))
 
 (defmethod responses-tools-as-json ((this llm) persona)
   (to-json-array
