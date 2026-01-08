@@ -97,8 +97,9 @@
                                        :arguments (alexandria:assoc-value json-alist :parameters))
                         llm-responses)))))
 
-        (push (llm-response:create-message (alexandria:assoc-value message-alist :role) result)
-              llm-responses)))
+        (if (not (string-equal "" result))
+            (push (llm-response:create-message (alexandria:assoc-value message-alist :role) result)
+                  llm-responses))))
 
     llm-responses))
 
