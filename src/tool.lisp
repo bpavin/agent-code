@@ -226,7 +226,7 @@ Lines without a prefix are unchanged
 
 (defclass dir-tool (tool)
   ((name :initform "dir_command")
-   (description :initform "List all files in a directory.")
+   (description :initform "List all files in a directory. This will list only first level files, it won't list subdirectories.")
    (properties :initform '((:path . ((:type . :string)
                                      (:description . "Absolute path of a directory. Wildcards are not accepted.")))))
    (required :initform '(:path))))
