@@ -120,6 +120,12 @@
     ("message"
      `((:role . ,(llm-response:role llm-response))
        (:content . ,(llm-response:text llm-response))))
+    ("function_call"
+     `((:role . :assistant)
+       (:content . ,(cl-json:encode-json-alist-to-string
+                     `((:call--id . ,(llm-response:call-id llm-response))
+                       (:name . ,(llm-response:name llm-response))
+                       (:arguments . ,(llm-response:arguments llm-response)))))))
     ("function_call_output"
      `((:role . :assistant)
        (:content . ,(cl-json:encode-json-alist-to-string
