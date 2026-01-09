@@ -173,12 +173,16 @@
 
 What the parts mean
 
---- a/hello.txt → original file
-+++ b/hello.txt → new file
-@@ -<old start>,<old count + 1> +<new start>,<new count + 1> @@ → hunk header (lines affected, line count must be incremented by 1)
-Lines starting with - were removed
-Lines starting with + were added
-Lines without a prefix are unchanged
+• Unified diff represents changes between two versions of a file
+• Diff starts with file headers: --- old_file and +++ new_file
+• Changes are grouped into hunks
+• Each hunk begins with a header: @@ -old_start,old_len +new_start,new_len @@
+• A hunk contains:
+ - Context (unchanged) lines starting with a space
+ - Removed lines starting with -
+ - Added lines starting with +
+• Multiple hunks appear when changes are far apart in the file
+• Hunks are ordered from top to bottom of the file
 ")))))
    (required :initform '(:project-dir :diff))))
 
@@ -234,7 +238,11 @@ Lines without a prefix are unchanged
 (defmethod tool-execute ((tool dir-tool) args)
   (if (null args)
       (error "No arguments specified."))
+
   (let* ((path (aget args :path)))
+    (if (null path)
+        (error "Path not specified."))
+
     (if (not (serapeum:string-suffix-p "/" path))
         (setf path (format nil "~A/" path)))
     (let ((files (uiop:directory-files path)))

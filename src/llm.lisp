@@ -11,8 +11,10 @@
      #:send-query
      #:project-path
      #:project-summary
+     #:history
      #:last-in-history
-     #:clear-history))
+     #:clear-history
+     #:mode))
 
 (in-package :agent-code/src/llm)
 
@@ -24,6 +26,9 @@
    (tools-enabled-p :initarg :tools-enabled-p
                     :initform t
                     :accessor tools-enabled-p)
+   (mode :initarg :mode
+         :initform :plan
+         :accessor mode)
    (project-path :initform nil
                  :initarg :project-path
                  :accessor project-path)
@@ -37,7 +42,7 @@
    (tools :initarg :tools
           :accessor tools)))
 
-(defmethod send-query ((this llm) persona query)
+(defmethod send-query ((this llm) persona query history)
   (when (null (history this))
 
     (add-history this (llm-response:create-message
@@ -46,8 +51,13 @@
                        :assistant (project-summary this)))
     (if (not (tools-enabled-p this))
         (add-history this (llm-response:create-message
-                           :assistant (format nil "Available tools. Must be called in JSON format. Wrap it in JSON fences. This are tool descriptions but also a format it is expected:~%~%~A"
-                                              (responses-tools-as-json this persona))))))
+                           :assistant (format nil "Available tools. Wrap the calls in JSON fences.
+Tools must be called in this format: {\"type\":\"function\",\"name\":\"replace-with-tool-name\",\"parameters\": <replace with parameters>}.
+These are tool descriptions:~%~%~A"
+                                              (responses-tools-as-json this persona)))))
+
+    (setf (history this)
+          (append history (history this))))
 
   (add-history this (llm-response:create-message :user query))
 
@@ -86,8 +96,9 @@
   (setf (history this) nil))
 
 (defmethod last-in-history ((this llm))
-  (let ((msg (pop (history this))))
-    (alexandria:assoc-value msg :content)))
+  (let ((llm-response (car (history this))))
+    (if llm-response
+        (llm-response:text llm-response))))
 
 (defmethod add-history ((this llm) llm-response)
   (if llm-response
@@ -147,7 +158,7 @@
              (log:info (llm-response:text llm-response)))))
 
     (if funcalls-p
-        (send-query this persona nil))))
+        (send-query this persona nil nil))))
 
 (defmethod handle-function-call ((this llm) persona tool-name args)
   (dolist (tool (or (persona:tools persona) (tools this)))

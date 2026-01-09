@@ -8,6 +8,7 @@
   (:import-from :agent-code/src/llm)
   (:import-from :agent-code/src/api-provider)
   (:import-from :agent-code/src/tool)
+  (:import-from :agent-code/src/llm-response)
   (:export
    #:main
    #:ask
@@ -48,33 +49,45 @@
          (response (llm:send-query *ctx* persona:analyzing-persona
                                    (format nil "Analyse the project ~A. These are the files in the project: ~A"
                                            (llm:project-path *ctx*)
-                                           list-of-files))))
+                                           list-of-files)
+                                   nil)))
     (log:info "~%~A" response)))
 
 (defun ask-analysis (query)
-  (let ((response (llm:send-query *ctx* persona:analyzing-persona query)))
+  (let ((response (llm:send-query *ctx* persona:analyzing-persona query nil)))
     (log:info "~%~A" response)))
 
 (defun ask (query &key (mode :plan))
   (setf query (append-file-content query))
 
-  (let* ((persona (case mode
+  (let* (history
+         (persona (case mode
                     (:base persona:base-persona)
                     (:plan persona:planning-persona)
                     (:implement (progn
-                                  (let* ((request (llm:last-in-history *ctx*))
-                                         (tmp (llm:clear-history *ctx*)))
-                                    (setf query request)
-                                    persona:coding-persona)))
+                                  (if (not (eq mode (llm:mode *ctx*)))
+                                      (let* ((request (llm:last-in-history *ctx*))
+                                             (funcalls
+                                               (mapcan (lambda (response)
+                                                         (if (or (string-equal "function_call" (llm-response:output-type response))
+                                                                 (string-equal "function_call_output" (llm-response:output-type response)))
+                                                             (list response)))
+                                                       (llm:history *ctx*)))
+                                             (tmp (llm:clear-history *ctx*)))
+                                        (setf query request)
+                                        (setf history funcalls)))
+                                  persona:coding-persona))
                     (:analyze persona:analyzing-persona)))
-         (response (llm:send-query *ctx* persona query)))
+         (tmp (progn (setf (llm:mode *ctx*) mode)))
+         (response (llm:send-query *ctx* persona query history)))
     (log:info "~%~A" response)))
 
 (defun append-file-content (query)
   (if query
       (cl-ppcre:do-register-groups (file-path) ("@([^\\s]+)" query)
-        (setf query
-              (format nil "~A~% ----- ~A -----~%~A~%~%"
-                      query file-path (alexandria:read-file-into-string file-path)))))
+        (if (probe-file file-path)
+            (setf query
+                  (format nil "~A~% ----- ~A -----~%~A~%~%"
+                          query file-path (alexandria:read-file-into-string file-path))))))
 
   query)
