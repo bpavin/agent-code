@@ -81,7 +81,8 @@
         (dolist (tool-alist (alexandria:assoc-value message-alist :tool--calls))
           (let ((fn-info (alexandria:assoc-value tool-alist :function)))
             (push (make-instance 'llm-response:llm-response
-                                 :output-type "function"
+                                 :output-type "function_call"
+                                 :call-id (format nil "call_~A" (serapeum:random-in-range 0 10000))
                                  :name (alexandria:assoc-value fn-info :name)
                                  :arguments (alexandria:assoc-value fn-info :arguments))
                   llm-responses)))
@@ -92,7 +93,8 @@
                 (when (or (string-equal json-type "function")
                           (alexandria:assoc-value json-alist :parameters))
                   (push (make-instance 'llm-response:llm-response
-                                       :output-type "function"
+                                       :output-type "function_call"
+                                       :call-id (format nil "call_~A" (serapeum:random-in-range 0 10000))
                                        :name (alexandria:assoc-value json-alist :name)
                                        :arguments (alexandria:assoc-value json-alist :parameters))
                         llm-responses)))))
@@ -127,6 +129,7 @@
      `((:role . :assistant)
        (:content . ,(cl-json:encode-json-alist-to-string
                      `((:type . :function--call--output)
+                       (:call--id . ,(llm-response:call-id llm-response))
                        (:name . ,(llm-response:name llm-response))
                        (:parameters . ,(llm-response:arguments llm-response))
                        (:output . ,(llm-response:text llm-response))
