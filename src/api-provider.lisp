@@ -37,7 +37,6 @@
                     ~A
                 ],
                 ~A
-                \"summary\": \"concise\",
                 \"stream\": false,
                 \"temperature\": 0.6,
                 \"max_tokens\": 20000
@@ -122,9 +121,10 @@
     ("function_call"
      `((:role . :assistant)
        (:content . ,(cl-json:encode-json-alist-to-string
-                     `((:call--id . ,(llm-response:call-id llm-response))
+                     `((:type . :function--call)
+                       (:call--id . ,(llm-response:call-id llm-response))
                        (:name . ,(llm-response:name llm-response))
-                       (:arguments . ,(llm-response:arguments llm-response)))))))
+                       (:parameters . ,(llm-response:arguments llm-response)))))))
     ("function_call_output"
      `((:role . :assistant)
        (:content . ,(cl-json:encode-json-alist-to-string
