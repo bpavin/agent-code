@@ -88,7 +88,7 @@
                   llm-responses)))
 
         (dolist (json-alist (extract-jsons result))
-          (if json-alist
+          (if (and json-alist (listp json-alist))
               (let ((json-type (alexandria:assoc-value json-alist :type)))
                 (when (or (string-equal json-type "function")
                           (alexandria:assoc-value json-alist :parameters))
@@ -194,7 +194,8 @@
       (handler-case
           (cl-json:decode-json-from-string str)
         (error (e)
-          (log:warn "Invalid JSON: ~A" e)))))
+          (log:warn "Invalid JSON: ~A" e)
+          (format nil "~A" e)))))
 
 (defmethod create-response ((this responses-api-provider) llm-response)
   (let ((out-type (llm-response:output-type llm-response)))

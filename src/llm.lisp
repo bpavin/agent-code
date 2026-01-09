@@ -51,7 +51,8 @@
                        :assistant (project-summary this)))
     (if (not (tools-enabled-p this))
         (add-history this (llm-response:create-message
-                           :assistant (format nil "Available tools. Wrap the calls in JSON fences.
+                           :assistant (format nil "Available tools.
+Tool calls must be the only message, surrounded by JSON fences, but no other explanations.
 Tools must be called in this format: {\"type\":\"function\",\"name\":\"replace-with-tool-name\",\"parameters\": <replace with parameters>}.
 These are tool descriptions:~%~%~A"
                                               (responses-tools-as-json this persona)))))
