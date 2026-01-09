@@ -107,12 +107,9 @@
   (if (not (string-equal "" str))
       (let (results)
         (cl-ppcre:do-register-groups (raw-json) ("```json([^`]*)?```" str)
-          (push (cl-json:decode-json-from-string raw-json) results))
+          (push (decode-json raw-json) results))
         (if (null results)
-            (handler-case
-                (list (cl-json:decode-json-from-string str))
-              (error (e)
-                (log:warn "Invalid JSON: ~A" e)))
+            (list (decode-json str))
             (nreverse results)))))
 
 (defmethod create-response ((this chat-completion-api-provider) llm-response)
@@ -129,7 +126,7 @@
     ("function_call_output"
      `((:role . :assistant)
        (:content . ,(cl-json:encode-json-alist-to-string
-                     `((:type . :function)
+                     `((:type . :function--call--output)
                        (:name . ,(llm-response:name llm-response))
                        (:parameters . ,(llm-response:arguments llm-response))
                        (:output . ,(llm-response:text llm-response))
@@ -173,8 +170,7 @@
     (dolist (output (alexandria:assoc-value api-alist :output))
       (let* ((result (rutils:-> (alexandria:assoc-value output :content)
                          car
-                         (alexandria:assoc-value rutils:% :text)
-                         sanitize)))
+                         (alexandria:assoc-value rutils:% :text))))
 
         (push (make-instance 'llm-response:llm-response
                              :output-type (alexandria:assoc-value output :type)
@@ -191,7 +187,11 @@
   (cl-ppcre:regex-replace-all "```(json)?" str ""))
 
 (defun decode-json (str)
-  (if str (cl-json:decode-json-from-string str)))
+  (if str
+      (handler-case
+          (cl-json:decode-json-from-string str)
+        (error (e)
+          (log:warn "Invalid JSON: ~A" e)))))
 
 (defmethod create-response ((this responses-api-provider) llm-response)
   (let ((out-type (llm-response:output-type llm-response)))

@@ -73,14 +73,14 @@
 
 (defun request-post (this content)
   (let ((url (format nil "~A~A" (host this) (api-provider:url (api-provider this)))))
-   (when (log:debug)
-     (log:debug "~A~%~A" url content))
+    (when (log:debug)
+      (log:debug "~A~%~A" url content))
 
-   (dex:post url
-             :insecure t
-             :read-timeout 60000
-             :headers '(("Content-type" . "application/json"))
-             :content content)))
+    (dex:post url
+              :insecure t
+              :read-timeout 60000
+              :headers '(("Content-type" . "application/json"))
+              :content content)))
 
 (defmethod clear-history ((this llm))
   (setf (history this) nil))
