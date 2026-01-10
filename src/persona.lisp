@@ -85,8 +85,6 @@ Use clear section headers exactly as listed above."))
   (make-instance 'persona
                  :tools (list (make-instance 'tool:read-many-files-tool)
                               (make-instance 'tool:write-tool)
-                              ;; (make-instance 'tool:edit-file-tool)
-                              ;; (make-instance 'tool:git-tool)
                               (make-instance 'tool:patch-tool)
                               (make-instance 'tool:grep-tool)
                               ;; (make-instance 'tool:delete-tool)
@@ -110,7 +108,6 @@ Rules:
 (defparameter planning-persona
   (make-instance 'persona
                  :tools (list (make-instance 'tool:read-many-files-tool)
-                              (make-instance 'tool:dir-tool)
                               (make-instance 'tool:grep-tool)
                               (make-instance 'tool:bash-tool))
                  :user

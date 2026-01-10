@@ -16,10 +16,7 @@
      #:write-tool
      #:delete-tool
      #:bash-tool
-     #:git-tool
-     #:dir-tool
      #:grep-tool
-     #:edit-file-tool
      #:patch-tool))
 
 (in-package :agent-code/src/tool)
@@ -79,33 +76,6 @@
   (alexandria:write-string-into-file (aget args :content) (aget args :path))
   "Success, file is written.")
 
-(defclass edit-file-tool (tool)
-  ((name :initform "edit_file")
-   (description :initform "Edit content of an existing file on the disk. .")
-   (properties :initform '((:path . ((:type . :string)
-                                     (:description . "Absolute path of the file.")))
-                           (:old-content . ((:type . :string)
-                                            (:description . "Content that exists in the file and that will be replaced.")))
-                           (:new-content . ((:type . :string)
-                                            (:description . "New content that will overwrite the old content.")))))
-   (required :initform '(:path :old-content :new-content))))
-
-(defmethod tool-execute ((tool edit-file-tool) args)
-  (if (< (length args) 3)
-      (error "Not enough arguments specified for writing.")
-      (let* ((path (aget args :path))
-             (old-content (aget args :old-content))
-             (original-file-content (alexandria:read-file-into-string path))
-             (edited-file-content (serapeum:string-replace-all
-                                   old-content original-file-content (aget args :new-content))))
-        (if (= (length original-file-content)
-               (length edited-file-content))
-            (if (search old-content original-file-content)
-                (error "Old content was not found in the file.")
-                (error "Edit failed. No changes were applied to the file.")))
-        (alexandria:write-string-into-file edited-file-content path :if-exists :supersede)
-        "File is edited successfully.")))
-
 (defclass delete-tool (tool)
   ((name :initform "delete_file")
    (description :initform "Deletes a file from disk.")
@@ -133,24 +103,6 @@
         (error "Command is not allowed ~A" "rm"))
 
     (call-system-shell cmd)))
-
-(defclass git-tool (tool)
-  ((name :initform "git_command")
-   (description :initform "Invoke git commands.")
-   (properties :initform '((:command . ((:type . :string)
-                                        (:description . "Arguments of the git command.")))))
-   (required :initform '(:command))))
-
-(defmethod tool-execute ((tool git-tool) args)
-  (if (null args)
-      (error "No command specified."))
-  (let* ((cmd-raw (aget args :command))
-         (cmd (if (serapeum:string-prefix-p "git" cmd-raw)
-                  cmd-raw
-                  (format nil "git ~A" cmd-raw))))
-    (if (serapeum:string-contains-p " rm " cmd)
-        (error "Command is not allowed ~A" "rm"))
-    (uiop:run-program cmd :output '(:string :stripped t))))
 
 (defclass patch-tool (tool)
   ((name :initform "patch_file")
@@ -227,26 +179,6 @@ What the parts mean
       (if (string-equal "" result)
           "No results."
           result))))
-
-(defclass dir-tool (tool)
-  ((name :initform "dir_command")
-   (description :initform "List all files in a directory. This will list only first level files, it won't list subdirectories.")
-   (properties :initform '((:path . ((:type . :string)
-                                     (:description . "Absolute path of a directory. Wildcards are not accepted.")))))
-   (required :initform '(:path))))
-
-(defmethod tool-execute ((tool dir-tool) args)
-  (if (null args)
-      (error "No arguments specified."))
-
-  (let* ((path (aget args :path)))
-    (if (null path)
-        (error "Path not specified."))
-
-    (if (not (serapeum:string-suffix-p "/" path))
-        (setf path (format nil "~A/" path)))
-    (let ((files (uiop:directory-files path)))
-      (format nil "~A" files))))
 
 (defun call-system-shell (cmd)
   (multiple-value-bind (out err code)
