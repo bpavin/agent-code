@@ -74,7 +74,7 @@
                                                              (list response)))
                                                        (llm:history *ctx*)))
                                              (tmp (llm:clear-history *ctx*)))
-                                        (setf query request)
+                                        (setf funcalls (nconc funcalls (list request)))
                                         (setf history funcalls)))
                                   persona:coding-persona))
                     (:analyze persona:analyzing-persona)))

@@ -97,9 +97,7 @@ These are tool descriptions:~%~%~A"
   (setf (history this) nil))
 
 (defmethod last-in-history ((this llm))
-  (let ((llm-response (car (history this))))
-    (if llm-response
-        (llm-response:text llm-response))))
+  (car (history this)))
 
 (defmethod add-history ((this llm) llm-response)
   (if llm-response

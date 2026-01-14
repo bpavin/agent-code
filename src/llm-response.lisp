@@ -4,6 +4,7 @@
     (:import-from :defclass-std)
 	(:export
      #:llm-response
+     #:id
      #:output-type
      #:role
      #:text
@@ -17,7 +18,8 @@
 (in-package :agent-code/src/llm-response)
 
 (defclass-std:defclass/std llm-response ()
-  ((output-type)
+  ((id)
+   (output-type)
    (role)
    (text)
    (call-id)

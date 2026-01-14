@@ -75,28 +75,32 @@
       (let* ((message-alist
                (alexandria:assoc-value choice :message))
              (result
-               (alexandria:assoc-value message-alist :content)))
+               (alexandria:assoc-value message-alist :content))
+             (tool-calls-p nil))
 
         (dolist (tool-alist (alexandria:assoc-value message-alist :tool--calls))
+          (setf tool-calls-p t)
           (let ((fn-info (alexandria:assoc-value tool-alist :function)))
             (push (make-instance 'llm-response:llm-response
                                  :output-type "function_call"
                                  :call-id (format nil "call_~A" (serapeum:random-in-range 0 10000))
                                  :name (alexandria:assoc-value fn-info :name)
-                                 :arguments (alexandria:assoc-value fn-info :arguments))
+                                 :arguments (decode-json (alexandria:assoc-value fn-info :arguments)))
                   llm-responses)))
 
-        (dolist (json-alist (extract-jsons result))
-          (if (and json-alist (listp json-alist))
-              (let ((json-type (alexandria:assoc-value json-alist :type)))
-                (when (or (string-equal json-type "function")
-                          (alexandria:assoc-value json-alist :parameters))
-                  (push (make-instance 'llm-response:llm-response
-                                       :output-type "function_call"
-                                       :call-id (format nil "call_~A" (serapeum:random-in-range 0 10000))
-                                       :name (alexandria:assoc-value json-alist :name)
-                                       :arguments (alexandria:assoc-value json-alist :parameters))
-                        llm-responses)))))
+        (if (not tool-calls-p)
+            (dolist (json-alist (extract-jsons result))
+              (if (and json-alist (listp json-alist))
+                  (let ((json-type (alexandria:assoc-value json-alist :type)))
+                    (when (or (string-equal json-type "function")
+                              (string-equal json-type "function_call")
+                              (alexandria:assoc-value json-alist :parameters))
+                      (push (make-instance 'llm-response:llm-response
+                                           :output-type "function_call"
+                                           :call-id (format nil "call_~A" (serapeum:random-in-range 0 10000))
+                                           :name (alexandria:assoc-value json-alist :name)
+                                           :arguments (alexandria:assoc-value json-alist :parameters))
+                            llm-responses))))))
 
         (if (not (string-equal "" result))
             (push (llm-response:create-message (alexandria:assoc-value message-alist :role) result)
@@ -146,7 +150,6 @@
                     ~A
                 ],
                 ~A
-                \"summary\": \"concise\",
                 \"stream\": false,
                 \"temperature\": 0.6,
                 \"max_output_tokens\": 20000
@@ -176,6 +179,7 @@
                          (alexandria:assoc-value rutils:% :text))))
 
         (push (make-instance 'llm-response:llm-response
+                             :id (alexandria:assoc-value output :id)
                              :output-type (alexandria:assoc-value output :type)
                              :call-id (alexandria:assoc-value output :call--id)
                              :name (alexandria:assoc-value output :name)
@@ -184,7 +188,7 @@
                              :text result)
               llm-responses)))
 
-    llm-responses))
+    (nreverse llm-responses)))
 
 (defun sanitize (str)
   (cl-ppcre:regex-replace-all "```(json)?" str ""))
@@ -205,7 +209,8 @@
            `((:role . ,(llm-response:role llm-response))
              (:content . ,(llm-response:text llm-response))))
           ("function_call"
-           `((:type . :function--call)
+           `((:id . ,(llm-response:id llm-response))
+             (:type . :function--call)
              (:call--id . ,(llm-response:call-id llm-response))
              (:name . ,(llm-response:name llm-response))
              (:arguments . ,(cl-json:encode-json-alist-to-string (llm-response:arguments llm-response)))))
