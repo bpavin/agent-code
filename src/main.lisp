@@ -59,21 +59,29 @@
                     (:plan persona:planning-persona)
                     (:implement (progn
                                   (if (not (eq mode (llm:mode *ctx*)))
-                                      (let* ((request (llm:last-in-history *ctx*))
-                                             (funcalls
-                                               (mapcan (lambda (response)
-                                                         (if (or (string-equal "function_call" (llm-response:output-type response))
-                                                                 (string-equal "function_call_output" (llm-response:output-type response)))
-                                                             (list response)))
-                                                       (llm:history *ctx*)))
-                                             (tmp (llm:clear-history *ctx*)))
-                                        (setf funcalls (nconc funcalls (list request)))
-                                        (setf history funcalls)))
+                                      (multiple-value-bind (last-query new-history)
+                                          (prepare-context-for-implementation)
+                                        (setf query last-query
+                                              history new-history)))
                                   persona:coding-persona))
                     (:analyze persona:analyzing-persona)))
-         (tmp (progn (setf (llm:mode *ctx*) mode)))
-         (response (llm:send-query *ctx* persona query history)))
-    (log:info "~%~A" response)))
+         (tmp (progn (setf (llm:mode *ctx*) mode))))
+
+    (declare (ignore tmp))
+    (llm:send-query *ctx* persona query history)))
+
+(defun prepare-context-for-implementation ()
+  (let* ((request (llm:last-in-history *ctx*))
+         (funcalls
+           (mapcan (lambda (response)
+                     (if (or (string-equal "function_call" (llm-response:output-type response))
+                             (string-equal "function_call_output" (llm-response:output-type response)))
+                         (list response)))
+                   (llm:history *ctx*)))
+         (tmp (llm:clear-history *ctx*)))
+    (declare (ignore tmp))
+
+    (values request funcalls)))
 
 (defun append-file-content (query)
   (if query
