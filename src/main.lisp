@@ -31,14 +31,7 @@
                                           (format nil "~A/agent-code.md" project-path)))
                     :api-provider (make-instance 'api-provider:responses-api-provider)
                     :tools (list (make-instance 'tool:read-many-files-tool)
-                                 ;; (make-instance 'tool:write-tool)
-                                 ;; (make-instance 'tool:git-appy-patch-tool :project-directory project-path)
-                                 ;; (make-instance 'tool:edit-file-tool)
-                                 ;; (make-instance 'tool:git-tool)
-                                 ;; (make-instance 'tool:grep-tool)
-                                 ;; (make-instance 'tool:delete-tool)
-                                 (make-instance 'tool:bash-tool)
-                                 ))))
+                                 (make-instance 'tool:bash-tool)))))
         (setf *ctx* this))))
 
 (defun initial-analysis ()
@@ -80,9 +73,23 @@
 
                                   persona:coding-persona))
                     (:analyze persona:analyzing-persona)))
-         (tmp (progn (setf (llm:mode *ctx*) mode)))
-         (response (llm:send-query *ctx* persona query history)))
-    (log:info "~%~A" response)))
+         (tmp (progn (setf (llm:mode *ctx*) mode))))
+
+    (declare (ignore tmp))
+    (llm:send-query *ctx* persona query history)))
+
+(defun prepare-context-for-implementation ()
+  (let* ((request (llm-response:text (llm:last-in-history *ctx*)))
+         (funcalls
+           (mapcan (lambda (response)
+                     (if (or (string-equal "function_call" (llm-response:output-type response))
+                             (string-equal "function_call_output" (llm-response:output-type response)))
+                         (list response)))
+                   (llm:history *ctx*)))
+         (tmp (llm:clear-history *ctx*)))
+    (declare (ignore tmp))
+
+    (values request funcalls)))
 
 (defun append-file-content (query)
   (if query

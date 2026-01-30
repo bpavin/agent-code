@@ -20,7 +20,7 @@
 
 (defclass-std:defclass/std persona ()
   ((system :std
-           "You are assistant to the sofware developer.")
+           "You are sofware developer.")
    (developer
     user
     assistant)
@@ -90,7 +90,7 @@ Use clear section headers exactly as listed above."))
                               ;; (make-instance 'tool:delete-tool)
                               (make-instance 'tool:bash-tool))
                  :user
-                 "You are a software developer operating inside a real codebase.
+                 "You are a software developer.
 
 Your only job is to modify files to fulfill previously planned implementation.
 
@@ -110,7 +110,7 @@ Rules:
                               (make-instance 'tool:dir-tool)
                               (make-instance 'tool:bash-tool))
                  :user
-                 "You are a specialized \"planner\" AI. Your task is to analyze the user's request from the chat messages and create either:
+                 "You are a specialized 'planner' AI. Your task is to analyze the user's request from the chat messages and create either:
 1. A detailed step-by-step plan (if you have enough information) on behalf of user that another \"executor\" AI agent can follow, or
 2. A list of clarifying questions (if you do not have enough information) prompting the user to reply with the needed clarifications
 
