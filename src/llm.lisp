@@ -60,7 +60,8 @@ These are tool descriptions:~%~%~A"
     (setf (history this)
           (append history (history this))))
 
-  (add-history this (llm-response:create-message :user query))
+  (if query
+      (add-history this (llm-response:create-message :user query)))
 
   (let* ((api-response (call-chat-completion this persona query)))
 

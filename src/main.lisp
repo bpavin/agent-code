@@ -71,7 +71,7 @@
     (llm:send-query *ctx* persona query history)))
 
 (defun prepare-context-for-implementation ()
-  (let* ((request (llm:last-in-history *ctx*))
+  (let* ((request (llm-response:text (llm:last-in-history *ctx*)))
          (funcalls
            (mapcan (lambda (response)
                      (if (or (string-equal "function_call" (llm-response:output-type response))
