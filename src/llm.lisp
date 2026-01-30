@@ -40,7 +40,11 @@
                  :accessor api-provider)
    (history :initform nil
             :accessor history)
+   (memory-enabled-p :initform T
+                     :initarg :memory-enabled-p
+                     :accessor memory-enabled-p)
    (memory :initform nil
+           :initarg :memory
            :accessor memory)
    (memory-tool :initform (make-instance 'memory-tool)
                 :accessor memory-tool)
@@ -52,22 +56,7 @@
           (list (memory-tool this))))
 
 (defmethod send-query ((this llm) persona query history)
-  (when (null (history this))
-
-    (add-history this (llm-response:create-message
-                       :assistant (format nil "Project directory is ~A" (project-path this))))
-    (add-history this (llm-response:create-message
-                       :assistant (project-summary this)))
-    (if (not (tools-enabled-p this))
-        (add-history this (llm-response:create-message
-                           :assistant (format nil "Available tools.
-Tool calls must be the only message, surrounded by JSON fences, but no other explanations.
-Tools must be called in this format: {\"type\":\"function\",\"name\":\"replace-with-tool-name\",\"parameters\": <replace with parameters>}.
-These are tool descriptions:~%~%~A"
-                                              (responses-tools-as-json this persona)))))
-
-    (setf (history this)
-          (append history (history this))))
+  (prepare-project-context this persona history)
 
   (if query
       (add-history this (llm-response:create-message :user query)))
@@ -78,8 +67,34 @@ These are tool descriptions:~%~%~A"
       (log:debug "LLM response: ~A" api-response))
 
     (let ((llm-responses (api-provider:handle-response (api-provider this) api-response)))
-
       (act-on-llm-response this persona llm-responses))))
+
+(defmethod compress-history ((this llm))
+  "Remove all history entries that are considered old."
+  (setf (history this)
+        (delete-if (lambda (llm-response)
+                     (member (llm-response:output-type llm-response)
+                             '("function_call" "function_call_output")
+                             :test #'string-equal))
+                   (history this)))
+  (setf (history this)
+        (subseq (history this) 0 (min (length (history this)) 5))))
+
+(defmethod prepare-project-context ((this llm) persona history)
+  (when (null (history this))
+    (add-history this (llm-response:create-message
+                       :assistant (format nil "Project directory is ~A" (project-path this))))
+    (add-history this (llm-response:create-message
+                       :assistant (project-summary this)))
+    (if (not (tools-enabled-p this))
+        (add-history this (llm-response:create-message
+                           :assistant (format nil "Available tools.
+Tool calls must be the only message, surrounded by JSON fences, but no other explanations.
+Tools must be called in this format: {\"type\":\"function\",\"name\":\"replace-with-tool-name\",\"parameters\": <replace with parameters>}.
+These are tool descriptions:~%~%~A"
+                                              (responses-tools-as-json this persona))))))
+  (setf (history this)
+        (append history (history this))))
 
 (defmethod call-chat-completion ((this llm) persona query)
   (let* ((conversation (get-history this persona))
@@ -117,6 +132,24 @@ These are tool descriptions:~%~%~A"
   "Returns conversation history. History is first copied, before appending custom history items."
   (let* ((conversations (mapcar (alexandria:curry #'api-provider:create-response (api-provider this))
                                 (reverse (history this)))))
+    (if (memory-enabled-p this)
+        (push (api-provider:create-response
+               (api-provider this)
+               (llm-response:create-message
+                :assistant (format nil "CRITICAL: Only last 5 messages will be visible to you.
+Tool results will be returned only the first time the tool is called, tool resuls won't be visible in
+the future conversations.
+Use ~A tool to keep track of important details about conversation.
+Memory list will be always visibile to you.
+Keep memory list concise, up to date, and use it often.
+Use memory list as a long term memory.
+
+==== MEMORY LIST ====
+~A
+"
+                                   +memory-tool-name+
+                                   (forge-memory-list (reverse (memory this))))))
+              conversations))
     (if (persona:user persona)
         (push `((:role . :user) (:content . ,(persona:get-user-prompt
                                               persona
@@ -127,7 +160,15 @@ These are tool descriptions:~%~%~A"
               conversations))
     (to-json-array conversations)))
 
-
+(defun forge-memory-list (memory)
+  (if (null memory)
+      "Memory list is empty."
+      (let ((count 0))
+        (serapeum:string-join
+         (mapcan (lambda (i)
+                   (list (format nil "~A. ~A" (incf count) i)))
+                 memory)
+         #\NewLine))))
 
 (defun to-json-array (lst)
   (serapeum:string-join
@@ -141,6 +182,10 @@ These are tool descriptions:~%~%~A"
            (get-tools this persona))))
 
 (defmethod act-on-llm-response ((this llm) persona llm-responses)
+  "Convert raw LLM response to internal structures. Execute function calls if any."
+
+  (compress-history this)
+
   (let ((funcalls-p nil))
     (dolist (llm-response llm-responses)
       (cond ((or (string-equal "function_call" (llm-response:output-type llm-response))
@@ -189,7 +234,6 @@ These are tool descriptions:~%~%~A"
   (if (log:trace)
       (log:trace "Tool executed [name=~A, args=~A, result=~A]" tool-name args tool-result)
       (log:debug "Tool executed successfully [name=~A]" tool-name)))
-
 
 (defparameter +memory-tool-name+ "update_memory")
 

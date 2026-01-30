@@ -78,19 +78,6 @@
     (declare (ignore tmp))
     (llm:send-query *ctx* persona query history)))
 
-(defun prepare-context-for-implementation ()
-  (let* ((request (llm-response:text (llm:last-in-history *ctx*)))
-         (funcalls
-           (mapcan (lambda (response)
-                     (if (or (string-equal "function_call" (llm-response:output-type response))
-                             (string-equal "function_call_output" (llm-response:output-type response)))
-                         (list response)))
-                   (llm:history *ctx*)))
-         (tmp (llm:clear-history *ctx*)))
-    (declare (ignore tmp))
-
-    (values request funcalls)))
-
 (defun append-file-content (query)
   (if query
       (cl-ppcre:do-register-groups (file-path) ("@([^\\s]+)" query)
