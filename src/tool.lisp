@@ -1,6 +1,7 @@
 (defpackage :agent-code/src/tool
 	(:use :cl)
     (:nicknames :tool)
+    (:import-from :cl-json)
 	(:export
      #:tool
 
@@ -9,6 +10,7 @@
      #:properties
      #:required
 
+     #:aget
      #:to-alist
      #:tool-execute
 
@@ -16,9 +18,7 @@
      #:write-tool
      #:delete-tool
      #:bash-tool
-     #:git-tool
      #:dir-tool
-     #:grep-tool
      #:edit-file-tool
      #:patch-tool))
 
@@ -56,10 +56,14 @@
 
 (defmethod tool-execute ((tool read-many-files-tool) args)
   (if (null args)
-      (error "No file specified for reading.")
-      (with-output-to-string (out)
-        (dolist (path (aget args :paths) out)
-          (format out "----- ~A -----~%~%~A~%~%" path (read-file path))))))
+      (error "No file specified for reading."))
+  (let ((paths (aget args :paths)))
+    (if (stringp paths)
+        (setf paths (cl-json:decode-json-from-string paths)))
+
+    (with-output-to-string (out)
+      (dolist (path paths out)
+        (format out "----- ~A -----~%~%~A~%~%" path (read-file path))))))
 
 (defun read-file (path)
   (alexandria:read-file-into-string path))
@@ -81,7 +85,7 @@
 
 (defclass edit-file-tool (tool)
   ((name :initform "edit_file")
-   (description :initform "Edit content of an existing file on the disk. .")
+   (description :initform "Edit content of an existing file on the disk.")
    (properties :initform '((:path . ((:type . :string)
                                      (:description . "Absolute path of the file.")))
                            (:old-content . ((:type . :string)
@@ -92,19 +96,20 @@
 
 (defmethod tool-execute ((tool edit-file-tool) args)
   (if (< (length args) 3)
-      (error "Not enough arguments specified for writing.")
-      (let* ((path (aget args :path))
-             (old-content (aget args :old-content))
-             (original-file-content (alexandria:read-file-into-string path))
-             (edited-file-content (serapeum:string-replace-all
-                                   old-content original-file-content (aget args :new-content))))
-        (if (= (length original-file-content)
-               (length edited-file-content))
-            (if (search old-content original-file-content)
-                (error "Old content was not found in the file.")
-                (error "Edit failed. No changes were applied to the file.")))
-        (alexandria:write-string-into-file edited-file-content path :if-exists :supersede)
-        "File is edited successfully.")))
+      (error "Not enough arguments specified for writing."))
+
+  (let* ((path (aget args :path))
+         (old-content (aget args :old-content))
+         (original-file-content (alexandria:read-file-into-string path))
+         (edited-file-content (serapeum:string-replace-all
+                               old-content original-file-content (aget args :new-content))))
+    (if (= (length original-file-content)
+           (length edited-file-content))
+        (if (search old-content original-file-content)
+            (error "Old content was not found in the file.")
+            (error "Edit failed. No changes were applied to the file.")))
+    (alexandria:write-string-into-file edited-file-content path :if-exists :supersede)
+    "File is edited successfully."))
 
 (defclass delete-tool (tool)
   ((name :initform "delete_file")
@@ -134,24 +139,6 @@
 
     (call-system-shell cmd)))
 
-(defclass git-tool (tool)
-  ((name :initform "git_command")
-   (description :initform "Invoke git commands.")
-   (properties :initform '((:command . ((:type . :string)
-                                        (:description . "Arguments of the git command.")))))
-   (required :initform '(:command))))
-
-(defmethod tool-execute ((tool git-tool) args)
-  (if (null args)
-      (error "No command specified."))
-  (let* ((cmd-raw (aget args :command))
-         (cmd (if (serapeum:string-prefix-p "git" cmd-raw)
-                  cmd-raw
-                  (format nil "git ~A" cmd-raw))))
-    (if (serapeum:string-contains-p " rm " cmd)
-        (error "Command is not allowed ~A" "rm"))
-    (uiop:run-program cmd :output '(:string :stripped t))))
-
 (defclass patch-tool (tool)
   ((name :initform "patch_file")
    (project-directory :initarg :project-directory :accessor project-directory)
@@ -175,14 +162,12 @@ What the parts mean
 
 • Unified diff represents changes between two versions of a file
 • Diff starts with file headers: --- old_file and +++ new_file
-• Changes are grouped into hunks
-• Each hunk begins with a header: @@ -old_start,old_len +new_start,new_len @@
+• Multiple hunks are NOT ALLOWED
+• Hunk begins with a header: @@ -old_start,old_len +new_start,new_len @@
 • A hunk contains:
  - Context (unchanged) lines starting with a space
  - Removed lines starting with -
  - Added lines starting with +
-• Multiple hunks appear when changes are far apart in the file
-• Hunks are ordered from top to bottom of the file
 ")))))
    (required :initform '(:project-dir :diff))))
 
@@ -199,34 +184,6 @@ What the parts mean
                     diff)))
       (log:trace cmd)
       (call-system-shell cmd))))
-
-(defclass grep-tool (tool)
-  ((name :initform "grep_command")
-   (description :initform "Invoke grep commands.")
-   (properties :initform '((:command . ((:type . :string)
-                                        (:description . "Arguments of the grep command. Paths must be absolute paths.")))))
-   (required :initform '(:command))))
-
-(defmethod tool-execute ((tool grep-tool) args)
-  (if (null args)
-      (error "No command specified."))
-  (let* ((cmd-raw (aget args :command))
-         (cmd (if (or (serapeum:string-prefix-p "grep " cmd-raw)
-                      (serapeum:string-prefix-p "find " cmd-raw))
-                  cmd-raw
-                  (format nil "grep ~A" cmd-raw))))
-    (if (serapeum:string-contains-p " rm " cmd)
-        (error "Command is not allowed ~A" "rm"))
-
-    (let ((result (uiop:run-program "cat"
-                                    :input
-                                    (uiop:process-info-output
-                                     (uiop:launch-program cmd
-                                                          :output :stream))
-                                    :output '(:string :stripped t))))
-      (if (string-equal "" result)
-          "No results."
-          result))))
 
 (defclass dir-tool (tool)
   ((name :initform "dir_command")
@@ -257,3 +214,4 @@ What the parts mean
     (if (and (> code 0) err (not (string-equal "" err)))
         (error err)
         out)))
+

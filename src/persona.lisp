@@ -53,7 +53,7 @@ Do NOT rewrite or refactor the code yet.
 Focus only on understanding and summarizing.
 
 DO NOT INVENT THINGS ABOUT THE PROJECT
-FAVOR USING TOOLS IF IT SOMETHING IS UNCLEAR
+FAVOR USING TOOLS IF SOMETHING IS UNCLEAR
 
 Include the following sections:
 
@@ -85,13 +85,10 @@ Use clear section headers exactly as listed above."))
   (make-instance 'persona
                  :tools (list (make-instance 'tool:read-many-files-tool)
                               (make-instance 'tool:write-tool)
-                              ;; (make-instance 'tool:edit-file-tool)
-                              ;; (make-instance 'tool:git-tool)
-                              (make-instance 'tool:patch-tool)
-                              (make-instance 'tool:grep-tool)
+                              (make-instance 'tool:edit-file-tool)
+                              ;; (make-instance 'tool:patch-tool)
                               ;; (make-instance 'tool:delete-tool)
-                              ;; (make-instance 'tool:bash-tool)
-                              )
+                              (make-instance 'tool:bash-tool))
                  :user
                  "You are a software developer operating inside a real codebase.
 
@@ -111,7 +108,6 @@ Rules:
   (make-instance 'persona
                  :tools (list (make-instance 'tool:read-many-files-tool)
                               (make-instance 'tool:dir-tool)
-                              (make-instance 'tool:grep-tool)
                               (make-instance 'tool:bash-tool))
                  :user
                  "You are a specialized \"planner\" AI. Your task is to analyze the user's request from the chat messages and create either:

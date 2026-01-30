@@ -12,6 +12,7 @@
      #:project-path
      #:project-summary
      #:history
+     #:memory
      #:last-in-history
      #:clear-history
      #:mode))
@@ -39,8 +40,16 @@
                  :accessor api-provider)
    (history :initform nil
             :accessor history)
+   (memory :initform nil
+           :accessor memory)
+   (memory-tool :initform (make-instance 'memory-tool)
+                :accessor memory-tool)
    (tools :initarg :tools
           :accessor tools)))
+
+(defmethod get-tools ((this llm) persona)
+  (append (or (persona:tools persona) (tools this))
+          (list (memory-tool this))))
 
 (defmethod send-query ((this llm) persona query history)
   (when (null (history this))
@@ -78,7 +87,7 @@ These are tool descriptions:~%~%~A"
                    (model this)
                    conversation
                    (if (tools-enabled-p this)
-                       (or (persona:tools persona) (tools this))))))
+                       (get-tools this persona)))))
 
     (request-post this content)))
 
@@ -110,12 +119,14 @@ These are tool descriptions:~%~%~A"
     (if (persona:user persona)
         (push `((:role . :user) (:content . ,(persona:get-user-prompt
                                               persona
-                                              (or (persona:tools persona) (tools this)))))
+                                              (get-tools this persona))))
               conversations))
     (if (persona:system persona)
         (push `((:role . :system) (:content . ,(persona:system persona)))
               conversations))
     (to-json-array conversations)))
+
+
 
 (defun to-json-array (lst)
   (serapeum:string-join
@@ -126,7 +137,7 @@ These are tool descriptions:~%~%~A"
   (to-json-array
    (mapcar (lambda (tool)
              (tool:to-alist tool))
-           (or (persona:tools persona) (tools this)))))
+           (get-tools this persona))))
 
 (defmethod act-on-llm-response ((this llm) persona llm-responses)
   (let ((funcalls-p nil))
@@ -160,13 +171,54 @@ These are tool descriptions:~%~%~A"
         (send-query this persona nil nil))))
 
 (defmethod handle-function-call ((this llm) persona tool-name args)
-  (dolist (tool (or (persona:tools persona) (tools this)))
+  (dolist (tool (get-tools this persona))
     (when (string-equal tool-name (tool:name tool))
       (log:debug "Executing tool [name=~A, args=~A]" tool-name args)
-      (let ((tool-result (tool:tool-execute tool args)))
+      (cond ((string-equal tool-name +memory-tool-name+)
+             (update-memory tool this args))
 
-        (if (log:trace)
-            (log:trace "Tool executed [name=~A, args=~A, result=~A]" tool-name args tool-result)
-            (log:debug "Tool executed successfully [name=~A, args=~A]" tool-name args))
+            (T
+             (let ((tool-result (tool:tool-execute tool args)))
 
-        (return-from handle-function-call tool-result)))))
+               (log-tool-result tool-name args tool-result)
+
+               (return-from handle-function-call tool-result)))))))
+
+(defun log-tool-result (tool-name args tool-result)
+  (if (log:trace)
+      (log:trace "Tool executed [name=~A, args=~A, result=~A]" tool-name args tool-result)
+      (log:debug "Tool executed successfully [name=~A]" tool-name)))
+
+
+(defparameter +memory-tool-name+ "update_memory")
+
+(defclass memory-tool (tool:tool)
+  ((tool:name :initform +memory-tool-name+)
+   (tool:description :initform "Tool used for retaining key information. Use this often to store key information about previous conversation.")
+   (tool:properties :initform '((:operation . ((:type . :string)
+                                          (:description . "Operation for updating memory. Must be one of: INSERT, UPDATE, REMOVE. You can insert new memory item or update/delete existing.")))
+                           (:index . ((:type . :integer)
+                                      (:description . "Memory is kept in a list. Specify which memory item by index you want to update. Index is mandatory for update and delete.")))
+                           (:content . ((:type . :string)
+                                        (:description . "Information you want to update memory with. Content is mandatory for insert and update.")))))
+   (tool:required :initform '(:operation))))
+
+(defmethod update-memory ((tool memory-tool) llm args)
+  (if (null args)
+      (error "No arguments specified."))
+
+  (let* ((operation (tool:aget args :operation)))
+    (if (null operation)
+        (error "Operation is not specified."))
+
+    (alexandria:switch (operation :test #'string-equal)
+      ("insert"
+       (setf (llm:memory llm)
+             (append (llm:memory llm)
+                     (tool:aget args :content))))
+      ("update"
+       (setf (nth (tool:aget args :index) (llm:memory llm))
+             (tool:aget args :content)))
+      ("remove"
+       (delete (nth (tool:aget args :index) (llm:memory llm))
+               (llm:memory llm))))))

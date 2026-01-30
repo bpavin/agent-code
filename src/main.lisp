@@ -2,7 +2,6 @@
   (:use #:cl)
   (:import-from :log4cl)
   (:import-from :dexador)
-  (:import-from :cl-json)
   (:import-from :rutils)
   (:import-from :serapeum)
   (:import-from :agent-code/src/llm)
@@ -74,8 +73,11 @@
                                                              (list response)))
                                                        (llm:history *ctx*)))
                                              (tmp (llm:clear-history *ctx*)))
-                                        (setf funcalls (nconc funcalls (list request)))
-                                        (setf history funcalls)))
+
+                                        (when request
+                                          (setf (llm-response:role request) :user)
+                                          (setf history (nconc (list request) funcalls)))))
+
                                   persona:coding-persona))
                     (:analyze persona:analyzing-persona)))
          (tmp (progn (setf (llm:mode *ctx*) mode)))
