@@ -260,7 +260,7 @@ Use memory list as a long term memory.
       ("insert"
        (setf (llm:memory llm)
              (append (llm:memory llm)
-                     (tool:aget args :content))))
+                     (list (tool:aget args :content)))))
       ("update"
        (setf (nth (tool:aget args :index) (llm:memory llm))
              (tool:aget args :content)))
