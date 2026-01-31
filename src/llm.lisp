@@ -67,6 +67,7 @@
       (log:debug "LLM response: ~A" api-response))
 
     (let ((llm-responses (api-provider:handle-response (api-provider this) api-response)))
+
       (act-on-llm-response this persona llm-responses))))
 
 (defmethod compress-history ((this llm))
@@ -136,19 +137,18 @@ These are tool descriptions:~%~%~A"
         (push (api-provider:create-response
                (api-provider this)
                (llm-response:create-message
-                :assistant (format nil "CRITICAL: Only last 5 messages will be visible to you.
-Tool results will be returned only the first time the tool is called, tool resuls won't be visible in
-the future conversations.
+                :assistant (format nil "CRITICAL:
 Use ~A tool to keep track of important details about conversation.
 Memory list will be always visibile to you.
 Keep memory list concise, up to date, and use it often.
-Use memory list as a long term memory.
+Use memory list as a longterm memory.
+Using this tool will remove past conversation and only the last 5 messages will be visible to you.
 
 ==== MEMORY LIST ====
 ~A
 "
                                    +memory-tool-name+
-                                   (forge-memory-list (reverse (memory this))))))
+                                   (forge-memory-list (memory this)))))
               conversations))
     (if (persona:user persona)
         (push `((:role . :user) (:content . ,(persona:get-user-prompt
@@ -166,7 +166,10 @@ Use memory list as a long term memory.
       (let ((count 0))
         (serapeum:string-join
          (mapcan (lambda (i)
-                   (list (format nil "~A. ~A" (incf count) i)))
+                   (list (format nil "~A. --- note start ---
+~A
+--- note end ---"
+                                 (incf count) i)))
                  memory)
          #\NewLine))))
 
@@ -183,8 +186,6 @@ Use memory list as a long term memory.
 
 (defmethod act-on-llm-response ((this llm) persona llm-responses)
   "Convert raw LLM response to internal structures. Execute function calls if any."
-
-  (compress-history this)
 
   (let ((funcalls-p nil))
     (dolist (llm-response llm-responses)
@@ -207,10 +208,12 @@ Use memory list as a long term memory.
                (add-history this llm-response)
                (add-history this
                              (llm-response:create-function-output
-                              llm-response success result))))
+                              llm-response success result))))))
 
-            ((string-equal "message" (llm-response:output-type llm-response))
-             (add-history this llm-response)
+    (dolist (llm-response llm-responses)
+      (cond ((string-equal "message" (llm-response:output-type llm-response))
+             (if (not funcalls-p)
+                 (add-history this llm-response))
              (log:info (llm-response:text llm-response)))))
 
     (if funcalls-p
@@ -221,7 +224,10 @@ Use memory list as a long term memory.
     (when (string-equal tool-name (tool:name tool))
       (log:debug "Executing tool [name=~A, args=~A]" tool-name args)
       (cond ((string-equal tool-name +memory-tool-name+)
-             (update-memory tool this args))
+             (let ((memory-result (update-memory tool this args)))
+               ;(compress-history this)
+               (clear-history this)
+               (return-from handle-function-call memory-result)))
 
             (T
              (let ((tool-result (tool:tool-execute tool args)))
@@ -239,7 +245,9 @@ Use memory list as a long term memory.
 
 (defclass memory-tool (tool:tool)
   ((tool:name :initform +memory-tool-name+)
-   (tool:description :initform "Tool used for retaining key information. Use this often to store key information about previous conversation.")
+   (tool:description
+    :initform "Tool used for retaining key information. Use this often to store key information about previous conversation.
+Critical: Calling this tool will remove previous conversations, so make sure to include all information that is important for context.")
    (tool:properties :initform '((:operation . ((:type . :string)
                                           (:description . "Operation for updating memory. Must be one of: INSERT, UPDATE, REMOVE. You can insert new memory item or update/delete existing.")))
                            (:index . ((:type . :integer)
@@ -262,8 +270,13 @@ Use memory list as a long term memory.
              (append (llm:memory llm)
                      (list (tool:aget args :content)))))
       ("update"
-       (setf (nth (tool:aget args :index) (llm:memory llm))
-             (tool:aget args :content)))
+       (let ((i (- (parse-integer (tool:aget args :index)) 1)))
+         (setf (nth i (llm:memory llm))
+               (tool:aget args :content))))
       ("remove"
-       (delete (nth (tool:aget args :index) (llm:memory llm))
-               (llm:memory llm))))))
+       (setf (llm:memory llm)
+             (delete (nth (tool:aget args :index) (llm:memory llm))
+                     (llm:memory llm))))
+      (t
+       (error "Invalid operation: ~A" operation)))
+    "Memory successfully updated."))
