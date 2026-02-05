@@ -1,6 +1,7 @@
 (defpackage :agent-code/src/llm
 	(:use :cl)
     (:nicknames :llm)
+    (:import-from :cl-ppcre)
     (:import-from :defclass-std)
     (:import-from :agent-code/src/api-provider)
     (:import-from :agent-code/src/persona)
@@ -83,10 +84,6 @@
 
 (defmethod prepare-project-context ((this llm) persona history)
   (when (null (history this))
-    (add-history this (llm-response:create-message
-                       :assistant (format nil "Project directory is ~A" (project-path this))))
-    (add-history this (llm-response:create-message
-                       :assistant (project-summary this)))
     (if (not (tools-enabled-p this))
         (add-history this (llm-response:create-message
                            :assistant (format nil "Available tools.
@@ -111,7 +108,7 @@ These are tool descriptions:~%~%~A"
 (defun request-post (this content)
   (let ((url (format nil "~A~A" (host this) (api-provider:url (api-provider this)))))
     (when (log:debug)
-      (log:debug "~A~%~A" url (cl-ppcre:regex-replace-all "//s+" content " ")))
+      (log:debug "~A~%~A" url (cl-ppcre:regex-replace-all "\\s+" content " ")))
 
     (dex:post url
               :insecure t
@@ -133,6 +130,20 @@ These are tool descriptions:~%~%~A"
   "Returns conversation history. History is first copied, before appending custom history items."
   (let* ((conversations (mapcar (alexandria:curry #'api-provider:create-response (api-provider this))
                                 (reverse (history this)))))
+
+    (if (project-path this)
+        (push (api-provider:create-response
+               (api-provider this)
+               (llm-response:create-message
+                :assistant (format nil "Project directory is ~A" (project-path this))))
+              conversations))
+    (if (project-summary this)
+        (push (api-provider:create-response
+               (api-provider this)
+               (llm-response:create-message
+                :assistant (project-summary this)))
+              conversations))
+
     (if (memory-enabled-p this)
         (push (api-provider:create-response
                (api-provider this)
@@ -150,6 +161,7 @@ Using this tool will remove past conversation and only the last 5 messages will 
                                    +memory-tool-name+
                                    (forge-memory-list (memory this)))))
               conversations))
+
     (if (persona:user persona)
         (push `((:role . :user) (:content . ,(persona:get-user-prompt
                                               persona
