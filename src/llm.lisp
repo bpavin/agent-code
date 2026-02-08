@@ -57,8 +57,6 @@
           (list (memory-tool this))))
 
 (defmethod send-query ((this llm) persona query history)
-  (prepare-project-context this persona history)
-
   (if query
       (add-history this (llm-response:create-message :user query)))
 
@@ -79,18 +77,6 @@
     (if last-user-input
         (setf (history this)
               (list last-user-input)))))
-
-(defmethod prepare-project-context ((this llm) persona history)
-  (when (null (history this))
-    (if (not (tools-enabled-p this))
-        (add-history this (llm-response:create-message
-                           :assistant (format nil "Available tools.
-Tool calls must be the only message, surrounded by JSON fences, but no other explanations.
-Tools must be called in this format: {\"type\":\"function\",\"name\":\"replace-with-tool-name\",\"parameters\": <replace with parameters>}.
-These are tool descriptions:~%~%~A"
-                                              (responses-tools-as-json this persona))))))
-  (setf (history this)
-        (append history (history this))))
 
 (defmethod call-chat-completion ((this llm) persona query)
   (let* ((conversation (get-history this persona))
@@ -160,17 +146,15 @@ Using this tool will remove past conversation and only the last 5 messages will 
                                    (forge-memory-list (memory this)))))
               conversations))
 
-    (if (project-path this)
+    (if (not (tools-enabled-p this))
         (push (api-provider:create-response
                (api-provider this)
                (llm-response:create-message
-                :assistant (format nil "Project directory is ~A" (project-path this))))
-              conversations))
-    (if (project-summary this)
-        (push (api-provider:create-response
-               (api-provider this)
-               (llm-response:create-message
-                :assistant (project-summary this)))
+                :assistant (format nil "Available tools.
+Tool calls must be the only message, surrounded by JSON fences, but no other explanations.
+Tools must be called in this format: {\"type\":\"function\",\"name\":\"replace-with-tool-name\",\"parameters\": <replace with parameters>}.
+These are tool descriptions:~%~%~A"
+                                   (responses-tools-as-json this persona))))
               conversations))
 
     (if (persona:user persona)
