@@ -160,6 +160,19 @@ Using this tool will remove past conversation and only the last 5 messages will 
                                    (forge-memory-list (memory this)))))
               conversations))
 
+    (if (project-path this)
+        (push (api-provider:create-response
+               (api-provider this)
+               (llm-response:create-message
+                :assistant (format nil "Project directory is ~A" (project-path this))))
+              conversations))
+    (if (project-summary this)
+        (push (api-provider:create-response
+               (api-provider this)
+               (llm-response:create-message
+                :assistant (project-summary this)))
+              conversations))
+
     (if (persona:user persona)
         (push `((:role . :user) (:content . ,(persona:get-user-prompt
                                               persona
@@ -235,8 +248,7 @@ Using this tool will remove past conversation and only the last 5 messages will 
       (log:debug "Executing tool [name=~A, args=~A]" tool-name args)
       (cond ((string-equal tool-name +memory-tool-name+)
              (let ((memory-result (update-memory tool this args)))
-               ;(compress-history this)
-               (clear-history this)
+               (compress-history this)
                (return-from handle-function-call memory-result)))
 
             (T
