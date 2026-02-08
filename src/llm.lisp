@@ -111,7 +111,7 @@ These are tool descriptions:~%~%~A"
 (defun request-post (this content)
   (let ((url (format nil "~A~A" (host this) (api-provider:url (api-provider this)))))
     (when (log:debug)
-      (log:debug "~A~%~A" url content))
+      (log:debug "~A~%~A" url (cl-ppcre:regex-replace-all "//s+" content " ")))
 
     (dex:post url
               :insecure t
