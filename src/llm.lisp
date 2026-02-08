@@ -22,9 +22,11 @@
 
 (defclass llm ()
   ((host :initform "http://localhost:11434"
-        :accessor host)
+         :accessor host)
    (model :initform "qwen3:8b"
           :accessor model)
+   (api-key :initform nil
+            :accessor api-key)
    (tools-enabled-p :initarg :tools-enabled-p
                     :initform t
                     :accessor tools-enabled-p)
@@ -97,7 +99,9 @@
     (dex:post url
               :insecure t
               :read-timeout 60000
-              :headers '(("Content-type" . "application/json"))
+              :headers `(("Content-type" . "application/json")
+                         ,(if (api-key this)
+                              `("Authorization" . ,(format nil "Bearer ~A" (api-key this)))))
               :content content)))
 
 (defmethod clear-history ((this llm))
