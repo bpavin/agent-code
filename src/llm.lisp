@@ -73,14 +73,12 @@
 
 (defmethod compress-history ((this llm))
   "Remove all history entries that are considered old."
-  (setf (history this)
-        (delete-if (lambda (llm-response)
-                     (member (llm-response:output-type llm-response)
-                             '("function_call" "function_call_output")
-                             :test #'string-equal))
-                   (history this)))
-  (setf (history this)
-        (subseq (history this) 0 (min (length (history this)) 5))))
+  (let* ((last-user-input (find (lambda (lr)
+                                  (eq :user (llm-response:role lr)))
+                                (history this))))
+    (if last-user-input
+        (setf (history this)
+              (list last-user-input)))))
 
 (defmethod prepare-project-context ((this llm) persona history)
   (when (null (history this))
@@ -263,7 +261,8 @@ Critical: Calling this tool will remove previous conversations, so make sure to 
    (tool:properties :initform '((:operation . ((:type . :string)
                                           (:description . "Operation for updating memory. Must be one of: INSERT, UPDATE, REMOVE. You can insert new memory item or update/delete existing.")))
                            (:index . ((:type . :integer)
-                                      (:description . "Memory is kept in a list. Specify which memory item by index you want to update. Index is mandatory for update and delete.")))
+                                      (:description . "Memory is kept in a list. Each memory item is prefixed with index.
+Use this index to specify which memory item you want to update. Index is mandatory for update and delete.")))
                            (:content . ((:type . :string)
                                         (:description . "Information you want to update memory with. Content is mandatory for insert and update.")))))
    (tool:required :initform '(:operation))))
