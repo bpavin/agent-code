@@ -217,5 +217,7 @@
           ("function_call_output"
            `((:type . :function--call--output)
              (:call--id . ,(llm-response:call-id llm-response))
-             (:output . ,(llm-response:text llm-response))
+             (:output . ,(if (llm-response:text llm-response)
+                             (llm-response:text llm-response)
+                             ""))
              (:status . ,(llm-response:status llm-response))))))))

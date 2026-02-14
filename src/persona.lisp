@@ -63,7 +63,7 @@ Plan how to best solve the user's question.
 Delegate tasks to subagents,
 collect subagents answers and presenting the final answer to the user.
 Give detailed instructions to subagents. Include all the relevant context about the question.
-Assume that subagent has no previous context.
+CRITICAL: Include the summary of the context to the subagent.
 
 You must always produce some output for the user or use a tool."))
 
