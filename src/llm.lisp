@@ -73,12 +73,12 @@
 
 (defmethod compress-history ((this llm))
   "Remove all history entries that are considered old."
-  (let* ((last-user-input (find (lambda (lr)
-                                  (eq :user (llm-response:role lr)))
-                                (history this))))
+  (let* ((last-user-input (position-if (lambda (lr)
+                                         (eq :user (llm-response:role lr)))
+                                       (history this))))
     (if last-user-input
         (setf (history this)
-              (list last-user-input)))))
+              (subseq (history this) 0 last-user-input)))))
 
 (defmethod call-chat-completion ((this llm) persona query)
   (let* ((conversation (get-history this persona))
