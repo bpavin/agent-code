@@ -65,13 +65,16 @@ collect subagents answers and presenting the final answer to the user.
 Give detailed instructions to subagents. Include all the relevant context about the question.
 Assume that subagent has no previous context.
 
-At this point, you are no allowed to create, edit, delete or make any other changes to the project.
-For all modifications ask user to give you permission before proceeding with the change."))
+You must always produce some output for the user or use a tool."))
 
 (defparameter analyzing-persona
   (make-instance 'persona
                  :name "analyzer"
-                 :description "Used for analyzing specific project. Main point is to collect key information about the project."
+                 :description "Used for analyzing the project. Main point is to collect high level information about the project
+and prepare summary report."
+                 :tools (list (make-instance 'tool:read-many-files-tool)
+                              ;(make-instance 'tool:dir-tool)
+                              (make-instance 'tool:bash-tool))
                  :system
                  "You are analyzing the following codebase.
 Your task is to produce a concise but information-dense summary that will be used later as context for refactoring, optimization, and maintainability improvements.
@@ -138,7 +141,7 @@ Rules:
                  :name "planner"
                  :description "Used for planning changes that were requested by the user."
                  :tools (list (make-instance 'tool:read-many-files-tool)
-                              (make-instance 'tool:dir-tool)
+                              ;(make-instance 'tool:dir-tool)
                               (make-instance 'tool:bash-tool))
                  :user
                  "You are a specialized 'planner' AI. Your task is to analyze the user's request from the chat messages and create either:
@@ -156,9 +159,9 @@ Output:
 (defparameter explore-persona
   (make-instance 'persona
                  :name "explorer"
-                 :description "Used for exploring project."
+                 :description "Used for exploring project. Finding specific files and content of the files."
                  :tools (list (make-instance 'tool:read-many-files-tool)
-                              (make-instance 'tool:dir-tool)
+                              ;(make-instance 'tool:dir-tool)
                               (make-instance 'tool:bash-tool))
                  :user
                  "You are a specialized explorer AI.

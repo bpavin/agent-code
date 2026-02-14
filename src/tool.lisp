@@ -213,5 +213,6 @@ What the parts mean
                         :output :string)
     (if (and (> code 0) err (not (string-equal "" err)))
         (error err)
-        out)))
-
+        (if (string-equal "" out)
+            "Command was completed successfully."
+            out))))

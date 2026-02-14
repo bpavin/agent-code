@@ -44,7 +44,7 @@
                  :accessor api-provider)
    (history :initform nil
             :accessor history)
-   (memory-enabled-p :initform T
+   (memory-enabled-p :initform nil
                      :initarg :memory-enabled-p
                      :accessor memory-enabled-p)
    (memory :initform nil
@@ -58,7 +58,8 @@
 
 (defmethod get-tools ((this llm) persona)
   (append (or (persona:tools persona) (tools this))
-          (list (memory-tool this))))
+          (if (memory-enabled-p this)
+              (list (memory-tool this)))))
 
 (defmethod send-query ((this llm) persona query history)
   (if query
@@ -67,7 +68,7 @@
   (let* ((api-response (call-chat-completion this persona query)))
 
     (when (log:debug)
-      (log:debug "LLM response: ~A" api-response))
+      (log:debug "LLM response: ~A" (cl-ppcre:regex-replace-all "\\s+" api-response " ")))
 
     (let ((llm-responses (api-provider:handle-response (api-provider this) api-response)))
 
@@ -298,20 +299,27 @@ Use this index to specify which memory item you want to update. Index is mandato
 (defclass subagent-tool (tool:tool)
   ((tool:name :initform "execute_subagent")
    (tool:description :initform "Run standalone subagent to complete specific task.")
-   (tool:properties :initform `((:name . ((:type . :string)
-                                          (:description . ,(format nil "Name of the subagent. Available subagents: ~A~%"
-                                                                   (reduce (lambda (sum p)
-                                                                             (format nil "~AName: ~A~%Description: ~A~%"
-                                                                                     sum
-                                                                                     (persona:name p)
-                                                                                     (persona:description p)))
-                                                                           (list persona:explore-persona
-                                                                                 persona:planning-persona
-                                                                                 persona:coding-persona)
-                                                                           :initial-value "")))))
-                                (:prompt . ((:type . :string)
-                                            (:description . "Instructions for the subagent.")))))
+   (personas :initform (list persona:analyzing-persona
+                             persona:explore-persona
+                             persona:planning-persona
+                             persona:coding-persona)
+             :accessor personas)
+   (tool:properties)
    (tool:required :initform '(:name :prompt))))
+
+(defmethod initialize-instance :after ((this subagent-tool) &rest args)
+  (setf (tool:properties this)
+        `((:name . ((:type . :string)
+                    (:description . ,(format nil "Name of the subagent. Available subagents: ~A~%"
+                                             (reduce (lambda (sum p)
+                                                       (format nil "~AName: ~A~%Description: ~A~%"
+                                                               sum
+                                                               (persona:name p)
+                                                               (persona:description p)))
+                                                     (personas this)
+                                                     :initial-value "")))))
+          (:prompt . ((:type . :string)
+                      (:description . "Instructions for the subagent."))))))
 
 (defmethod tool:tool-execute ((tool subagent-tool) llm args)
   (if (null args)
@@ -327,9 +335,7 @@ Use this index to specify which memory item you want to update. Index is mandato
 
     (let* ((persona
              (find-if (lambda (p) (string-equal name (persona:name p)))
-                      (list persona:explore-persona
-                            persona:planning-persona
-                            persona:coding-persona)))
+                      (personas tool)))
            (subagent (make-instance 'llm:llm
                                     :project-path (project-path llm)
                                     :project-summary (project-summary llm)
