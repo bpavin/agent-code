@@ -30,7 +30,7 @@
      (properties :type list :accessor properties)
      (required :type list :accessor required)))
 
-(defgeneric tool-execute (this args)
+(defgeneric tool-execute (this llm args)
   (:documentation "Abstract method for tool implementation."))
 
 (defgeneric to-alist (this)
@@ -54,7 +54,7 @@
                                       (:description . "Array of the absolute paths of the files. Directories are not allowed. Wildcards are not allowed.")))))
    (required :initform '(:paths))))
 
-(defmethod tool-execute ((tool read-many-files-tool) args)
+(defmethod tool-execute ((tool read-many-files-tool) llm args)
   (if (null args)
       (error "No file specified for reading."))
   (let ((paths (aget args :paths)))
@@ -77,7 +77,7 @@
                                         (:description . "Content of the file.")))))
    (required :initform '(:path :content))))
 
-(defmethod tool-execute ((tool write-tool) args)
+(defmethod tool-execute ((tool write-tool) llm args)
   (if (< (length args) 2)
       (error "Not enough arguments specified for writing."))
   (alexandria:write-string-into-file (aget args :content) (aget args :path))
@@ -94,7 +94,7 @@
                                             (:description . "New content that will overwrite the old content.")))))
    (required :initform '(:path :old-content :new-content))))
 
-(defmethod tool-execute ((tool edit-file-tool) args)
+(defmethod tool-execute ((tool edit-file-tool) llm args)
   (if (< (length args) 3)
       (error "Not enough arguments specified for writing."))
 
@@ -118,7 +118,7 @@
                                      (:description . "Absolute path of the file.")))))
    (required :initform '(:path))))
 
-(defmethod tool-execute ((tool delete-tool) args)
+(defmethod tool-execute ((tool delete-tool) llm args)
   (if (null args)
       (error "No file specified for deletion.")
       (delete-file (aget args :path))))
@@ -130,7 +130,7 @@
                                         (:description . "Command and arguments of the bash command. Include cd of the directory you want to work with.")))))
    (required :initform '(:command))))
 
-(defmethod tool-execute ((tool bash-tool) args)
+(defmethod tool-execute ((tool bash-tool) llm args)
   (if (null args)
       (error "No command specified."))
   (let ((cmd (aget args :command)))
@@ -171,7 +171,7 @@ What the parts mean
 ")))))
    (required :initform '(:project-dir :diff))))
 
-(defmethod tool-execute ((tool patch-tool) args)
+(defmethod tool-execute ((tool patch-tool) llm args)
   (if (null args)
       (error "No command specified."))
   (let* ((diff (aget args :diff)))
@@ -192,7 +192,7 @@ What the parts mean
                                      (:description . "Absolute path of a directory. Wildcards are not accepted.")))))
    (required :initform '(:path))))
 
-(defmethod tool-execute ((tool dir-tool) args)
+(defmethod tool-execute ((tool dir-tool) llm args)
   (if (null args)
       (error "No arguments specified."))
 

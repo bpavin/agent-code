@@ -31,9 +31,7 @@
                                           (format nil "~A/agent-code.md" project-path)))
                     ;; :api-provider (make-instance 'api-provider:chat-completion-api-provider)
                     :api-provider (make-instance 'api-provider:responses-api-provider)
-                    :tools-enabled-p t
-                    :tools (list (make-instance 'tool:read-many-files-tool)
-                                 (make-instance 'tool:bash-tool)))))
+                    :tools-enabled-p t)))
         (setf *ctx* this))))
 
 (defun initial-analysis ()
@@ -51,11 +49,12 @@
   (let ((response (llm:send-query *ctx* persona:analyzing-persona query nil)))
     (log:info "~%~A" response)))
 
-(defun ask (query &key (mode :plan))
+(defun ask (query &key (mode :coordinator))
   (setf query (append-file-content query))
 
   (let* (history
          (persona (case mode
+                    (:coordinator persona:coordinator-persona)
                     (:base persona:base-persona)
                     (:plan persona:planning-persona)
                     (:implement (progn

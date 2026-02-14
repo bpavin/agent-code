@@ -39,7 +39,8 @@
    (project-summary :initform nil
                  :initarg :project-summary
                  :accessor project-summary)
-   (api-provider :initarg :api-provider
+   (api-provider :initform (make-instance 'api-provider:responses-api-provider)
+                 :initarg :api-provider
                  :accessor api-provider)
    (history :initform nil
             :accessor history)
@@ -51,7 +52,8 @@
            :accessor memory)
    (memory-tool :initform (make-instance 'memory-tool)
                 :accessor memory-tool)
-   (tools :initarg :tools
+   (tools :initform (list (make-instance 'subagent-tool))
+          :initarg :tools
           :accessor tools)))
 
 (defmethod get-tools ((this llm) persona)
@@ -228,7 +230,8 @@ These are tool descriptions:~%~%~A"
              (log:info (llm-response:text llm-response)))))
 
     (if funcalls-p
-        (send-query this persona nil nil))))
+        (send-query this persona nil nil)
+        (llm-response:text (car (history this))))))
 
 (defmethod handle-function-call ((this llm) persona tool-name args)
   (dolist (tool (get-tools this persona))
@@ -240,7 +243,7 @@ These are tool descriptions:~%~%~A"
                (return-from handle-function-call memory-result)))
 
             (T
-             (let ((tool-result (tool:tool-execute tool args)))
+             (let ((tool-result (tool:tool-execute tool this args)))
 
                (log-tool-result tool-name args tool-result)
 
@@ -291,3 +294,45 @@ Use this index to specify which memory item you want to update. Index is mandato
       (t
        (error "Invalid operation: ~A" operation)))
     "Memory successfully updated."))
+
+(defclass subagent-tool (tool:tool)
+  ((tool:name :initform "execute_subagent")
+   (tool:description :initform "Run standalone subagent to complete specific task.")
+   (tool:properties :initform `((:name . ((:type . :string)
+                                          (:description . ,(format nil "Name of the subagent. Available subagents: ~A~%"
+                                                                   (reduce (lambda (sum p)
+                                                                             (format nil "~AName: ~A~%Description: ~A~%"
+                                                                                     sum
+                                                                                     (persona:name p)
+                                                                                     (persona:description p)))
+                                                                           (list persona:explore-persona
+                                                                                 persona:planning-persona
+                                                                                 persona:coding-persona)
+                                                                           :initial-value "")))))
+                                (:prompt . ((:type . :string)
+                                            (:description . "Instructions for the subagent.")))))
+   (tool:required :initform '(:name :prompt))))
+
+(defmethod tool:tool-execute ((tool subagent-tool) llm args)
+  (if (null args)
+      (error "No arguments specified."))
+
+  (let* ((name (tool:aget args :name))
+         (prompt (tool:aget args :prompt)))
+    (if (null name)
+        (error "Name not specified."))
+    (if (null prompt)
+        (error "Prompt not specified."))
+
+
+    (let* ((persona
+             (find-if (lambda (p) (string-equal name (persona:name p)))
+                      (list persona:explore-persona
+                            persona:planning-persona
+                            persona:coding-persona)))
+           (subagent (make-instance 'llm:llm
+                                    :project-path (project-path llm)
+                                    :project-summary (project-summary llm)
+                                    :tools (persona:tools persona))))
+      (log:info "Starting subagent ~A" name)
+      (llm:send-query subagent persona prompt nil))))
