@@ -322,7 +322,8 @@ start-line: ~A, end-line: ~A and start-line: ~A, end-line: ~A" start-1 end-1 sta
           (destructuring-bind (op start end content) (nth op-id operations)
             (cond ((or (and start (< count start))
                        (and end (> count end)))
-                   (push line result)
+                   (if line
+                       (push line result))
                    (setf line (read-line file-stream nil nil)
                          count (+ 1 count)))
 
