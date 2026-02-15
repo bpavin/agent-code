@@ -190,9 +190,11 @@ What the parts mean
   ((name :initform "line_edit")
    (project-directory :initarg :project-directory :accessor project-directory)
    (description :initform "Edit file by specifying lines that must be added, replaced or removed.
+
 Example:
 Add new line at the start of the file:
 {
+\"operation\": \"add\",
 \"startLine\": 1,
 \"endLine\": 1,
 \"content\": \"new line\"
@@ -200,6 +202,7 @@ Add new line at the start of the file:
 
 Replace lines from lines 2 to 4:
 {
+\"operation\": \"replace\",
 \"startLine\": 2,
 \"endLine\": 4,
 \"content\": \"line 1\\nline 2\\nline 3\\n\"
@@ -207,11 +210,12 @@ Replace lines from lines 2 to 4:
 
 Remove line 6:
 {
+\"operation\": \"remove\",
 \"startLine\": 6,
 \"endLine\": 6
 }
 
-There can be 20 maximum operations.
+There can be only one operation.
 Ranges must not overlap.
 ")
    (properties :initform '((:file-path . ((:type . :string)
@@ -237,12 +241,12 @@ Input: JSON array of operations with structure:
    \"content\": \"string\"
    }
 Validates operations against file content.
-Safety checks: max 20 operations, no overlapping line ranges."))
+Safety checks: max 1 operation, no overlapping line ranges."))
 
 (defmethod tool-execute ((tool line-edit-tool) llm args)
   (let ((path (aget args :file-path))
         (operations (aget args :operations))
-        (max-operations 20)
+        (max-operations 1)
         (op-list nil))
     (if (null path)
         (error "File path must be defined."))
@@ -295,11 +299,12 @@ Safety checks: max 20 operations, no overlapping line ranges."))
           (destructuring-bind (op-1 start-1 end-1 _) (nth (- i 1) op-list)
             (destructuring-bind (op-2 start-2 end-2 _) (nth i op-list)
               (if (>= end-1 start-2)
-                  (error "Overlapping operations are not allowed.
-start-line: ~A, end-line: ~A and start-line: ~A, end-line: ~A" start-1 end-1 start-2 end-2))))))
+                  (error "Overlapping operations are not allowed. start-line: ~A, end-line: ~A and start-line: ~A, end-line: ~A"
+                         start-1 end-1 start-2 end-2))))))
 
     (let ((edited-file (apply-changes-to-file path op-list)))
-      (alexandria:write-string-into-file edited-file path :if-exists :supersede))))
+      (alexandria:write-string-into-file edited-file path :if-exists :supersede)
+      edited-file)))
 
 (defun apply-changes-to-file (file-path operations)
   (with-open-file (file-stream file-path :direction :input)
@@ -322,8 +327,7 @@ start-line: ~A, end-line: ~A and start-line: ~A, end-line: ~A" start-1 end-1 sta
           (destructuring-bind (op start end content) (nth op-id operations)
             (cond ((or (and start (< count start))
                        (and end (> count end)))
-                   (if line
-                       (push line result))
+                   (push (if line line "") result)
                    (setf line (read-line file-stream nil nil)
                          count (+ 1 count)))
 
