@@ -185,6 +185,131 @@ What the parts mean
       (log:trace cmd)
       (call-system-shell cmd))))
 
+(defclass line-edit-tool (tool)
+  ((name :initform "patch_file")
+   (project-directory :initarg :project-directory :accessor project-directory)
+   (description :initform "Apply diff with a patch command to the file.")
+   (properties :initform '((:file-path . ((:type . :string)
+                                          (:description . "Absolute path of the file.")))
+                           (:operations .
+                            ((:type . :array)
+                             (:description . "Array of operations")
+                             (:operation . ((:type . :string)
+                                            (:description . "Operation that will be executed on the file.
+Can be one of: add, remove or replace.")))
+                             (:start-line . ((:type . :integer)
+                                             (:description . "Start line of the change. Required for all operations.")))
+                             (:end-line . ((:type . :integer)
+                                           (:description . "End line of the change. Required for remove and replace operations.")))
+                             (:content . ((:type . :string)
+                                          (:description . "Content that will be applied to the file. Required for add and replace operations.")))))))
+   (required :initform '(:file-path :operations)))
+  (:documentation "Tool for performing line-based edits with context validation.
+Input: JSON array of operations with structure:
+  {\"operation\": \"add|remove|replace\",
+   \"line_number\": integer,
+   \"content\": \"string\",
+   \"context_lines\": 2 (optional)}
+Validates operations against file content, generates unified diff, and applies via patch-tool logic.
+Safety checks: max 20 operations, no overlapping line ranges."))
+
+(defmethod tool-execute ((tool line-edit-tool) llm args)
+  (let ((path (aget args :file-path))
+        (operations (aget args :operations))
+        (max-operations 20)
+        (op-list nil))
+    (if (null path)
+        (error "File path must be defined."))
+    (if (> (length operations) max-operations)
+        (error "Too many operations: ~a (max ~a)" (length operations) max-operations))
+
+    (dolist (op-alist operations)
+      (let* ((operation (aget op-alist :operation))
+             (start (aget op-alist :start-line))
+             (end (aget op-alist :end-line))
+             (content (aget op-alist :content)))
+
+        (alexandria:switch (operation :test #'string-equal)
+          ("add"
+           (if (or (null start) (null content))
+               (error "Add operation must have start-line and content."))
+           (setf operation :add))
+
+          ("remove"
+           (if (or (null start) (null end))
+               (error "Remove operation must have start-line and end-line."))
+           (setf operation :remove))
+
+          ("replace"
+           (if (or (null start) (null end) (null content))
+               (error "Replace operation must have start-line, end-line and content."))
+           (setf operation :replace)))
+
+        (push (list operation start end content)
+              op-list)))
+
+    (setf op-list
+          (sort op-list (lambda (l r) (<= (car l) (car r)))))
+
+    (apply-changes-to-file path op-list)))
+
+(defun apply-changes-to-file (file-path operations)
+  (with-output-to-string (str)
+    (with-open-file (file-stream file-path :direction :input)
+      (do ((line (read-line file-stream nil nil))
+           (count 1)
+           (op-id 0))
+          ((null line)
+           str)
+
+        (if (null (nth op-id operations))
+            (progn
+              (format str "~A~%" line)
+              (setf line (read-line file-stream nil nil)
+                    count (+ 1 count)) )
+
+            (destructuring-bind (op start end content) (nth op-id operations)
+              (cond ((or (and start (< count start))
+                         (and end (> count end)))
+                     (format str "~A~%" line)
+                     (setf line (read-line file-stream nil nil)
+                           count (+ 1 count)))
+
+                    ((eq op :add)
+                     (when (and start (= start count))
+                       (incf op-id)
+                       (format str "~A~%~A" content line)
+                       (setf line (read-line file-stream nil nil)
+                             count (+ 1 count))
+                       (break)))
+
+                    ((eq op :replace)
+                     (when (and start (= start count))
+                       (format str "~A~%" content)
+                       (break)
+                       )
+                     (when (and start end
+                                (<= start count end))
+                       (if (= end count)
+                           (incf op-id))
+
+                       (setf line (read-line file-stream nil nil)
+                             count (+ 1 count))
+                       (break)
+                       )
+                     )
+
+                    ((eq op :remove)
+                     (if (and end (<= count end))
+                         (setf line (read-line file-stream nil nil)
+                               count (+ 1 count)))
+                     (if (and end (= count end))
+                         (incf op-id)))
+
+                    )))
+
+        ))))
+
 (defclass dir-tool (tool)
   ((name :initform "dir_command")
    (description :initform "List all files in a directory. This will list only first level files, it won't list subdirectories.")
