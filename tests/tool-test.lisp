@@ -1,15 +1,16 @@
-(defpackage :agent-code/tests/tool
+(defpackage :agent-code/tests/tool-test
   (:use :cl
         :agent-code/src/tool
         :rove)
   (:import-from :alexandria))
-(in-package :agent-code/tests/tool)
+
+(in-package :agent-code/tests/tool-test)
 
 (defparameter patch-tool (make-instance 'patch-tool))
 
 (deftest test-patch-tool-valid
   (testing "Valid patch application"
-    (let* ((test-file "testfile.txt")
+    (let* ((test-file "tests/resources/testfile.txt")
            (diff
             "--- a/testfile.txt
 +++ b/testfile.txt

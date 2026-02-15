@@ -16,7 +16,7 @@
   :components ((:module "tests"
                 :components
                 ((:file "main")
-                 (:file "tool")
+                 (:file "tool-test")
                  (:file "api-provider-test"))))
   :description "Test system for agent-code"
   :perform (test-op (op c) (symbol-call :rove :run c)))
