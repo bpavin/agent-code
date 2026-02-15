@@ -20,7 +20,8 @@
      #:bash-tool
      #:dir-tool
      #:edit-file-tool
-     #:patch-tool))
+     #:patch-tool
+     #:line-edit-tool))
 
 (in-package :agent-code/src/tool)
 
@@ -186,9 +187,33 @@ What the parts mean
       (call-system-shell cmd))))
 
 (defclass line-edit-tool (tool)
-  ((name :initform "patch_file")
+  ((name :initform "line_edit")
    (project-directory :initarg :project-directory :accessor project-directory)
-   (description :initform "Apply diff with a patch command to the file.")
+   (description :initform "Edit file by specifying lines that must be added, replaced or removed.
+Example:
+Add new line at the start of the file:
+{
+\"startLine\": 1,
+\"endLine\": 1,
+\"content\": \"new line\"
+}
+
+Replace lines from lines 2 to 4:
+{
+\"startLine\": 2,
+\"endLine\": 4,
+\"content\": \"line 1\\nline 2\\nline 3\\n\"
+}
+
+Remove line 6:
+{
+\"startLine\": 6,
+\"endLine\": 6
+}
+
+There can be 20 maximum operations.
+Ranges must not overlap.
+")
    (properties :initform '((:file-path . ((:type . :string)
                                           (:description . "Absolute path of the file.")))
                            (:operations .
@@ -198,19 +223,20 @@ What the parts mean
                                             (:description . "Operation that will be executed on the file.
 Can be one of: add, remove or replace.")))
                              (:start-line . ((:type . :integer)
-                                             (:description . "Start line of the change.")))
+                                             (:description . "Start line of the change. First line in the file starts with 1.")))
                              (:end-line . ((:type . :integer)
-                                           (:description . "End line of the change.")))
+                                           (:description . "End line of the change. In case change is including single line, end-line is equal to start-line.")))
                              (:content . ((:type . :string)
                                           (:description . "Content that will be applied to the file. Required for add and replace operations.")))))))
    (required :initform '(:file-path :operations :start-line :end-line)))
   (:documentation "Tool for performing line-based edits with context validation.
 Input: JSON array of operations with structure:
   {\"operation\": \"add|remove|replace\",
-   \"line_number\": integer,
-   \"content\": \"string\",
-   \"context_lines\": 2 (optional)}
-Validates operations against file content, generates unified diff, and applies via patch-tool logic.
+   \"startLine\": integer,
+   \"endLine\": integer,
+   \"content\": \"string\"
+   }
+Validates operations against file content.
 Safety checks: max 20 operations, no overlapping line ranges."))
 
 (defmethod tool-execute ((tool line-edit-tool) llm args)
@@ -220,6 +246,8 @@ Safety checks: max 20 operations, no overlapping line ranges."))
         (op-list nil))
     (if (null path)
         (error "File path must be defined."))
+    (if (null operations)
+        (error "Operations are not defined."))
     (if (> (length operations) max-operations)
         (error "Too many operations: ~a (max ~a)" (length operations) max-operations))
 
@@ -227,20 +255,33 @@ Safety checks: max 20 operations, no overlapping line ranges."))
       (let* ((operation (aget op-alist :operation))
              (start (aget op-alist :start-line))
              (end (aget op-alist :end-line))
-             (content (aget op-alist :content)))
-
-        (if (or (null start) (null end) (null content))
-            (error "~S operation must have start-line, end-line and content." operation))
+             (content (or (aget op-alist :content) "")))
 
         (alexandria:switch (operation :test #'string-equal)
           ("add"
+           (if (or (null start) (null end) (null content))
+               (error "~S operation must have start-line, end-line and content." operation))
            (setf operation :add))
 
           ("remove"
+           (if (or (null start) (null end))
+               (error "~S operation must have start-line and end-line." operation))
            (setf operation :remove))
 
           ("replace"
-           (setf operation :replace)))
+           (if (or (null start) (null end) (null content))
+               (error "~S operation must have start-line, end-line and content." operation))
+
+           (setf operation :replace))
+
+          (t
+           (error "~A operations is invalid." operation)))
+
+        (if (< start 1)
+            (error "Lines must start with 1. start-line ~A is invalid." start))
+
+        (if (< end start)
+            (error "end-line must be greater or equal to start-line. start-line: ~A, end-line: ~A" start end))
 
         (push (list operation start end content)
               op-list)))
@@ -248,54 +289,69 @@ Safety checks: max 20 operations, no overlapping line ranges."))
     (setf op-list
           (sort op-list (lambda (l r) (<= (second l) (second r)))))
 
-    (apply-changes-to-file path op-list)))
+    (if (>= (length op-list) 2)
+        (do ((i 1 (+ i 1)))
+            ((>= i (length op-list)))
+          (destructuring-bind (op-1 start-1 end-1 _) (nth (- i 1) op-list)
+            (destructuring-bind (op-2 start-2 end-2 _) (nth i op-list)
+              (if (>= end-1 start-2)
+                  (error "Overlapping operations are not allowed.
+start-line: ~A, end-line: ~A and start-line: ~A, end-line: ~A" start-1 end-1 start-2 end-2))))))
+
+    (let ((edited-file (apply-changes-to-file path op-list)))
+      (alexandria:write-string-into-file edited-file path :if-exists :supersede))))
 
 (defun apply-changes-to-file (file-path operations)
-  (with-output-to-string (str)
-    (with-open-file (file-stream file-path :direction :input)
-      (do ((line (read-line file-stream nil nil))
-           (count 1)
-           (op-id 0))
-          ((null line)
-           str)
+  (with-open-file (file-stream file-path :direction :input)
+    (do ((result)
+         (line (read-line file-stream nil nil))
+         (count 1)
+         (op-id 0)
+         (op-endp nil))
+        ((and (null line) op-endp)
+         (format nil "~{~A~^~%~}" (nreverse result)))
 
-        (if (null (nth op-id operations))
-            (progn
-              (format str "~A~%" line)
-              (setf line (read-line file-stream nil nil)
-                    count (+ 1 count)) )
+      (if (null (nth op-id operations))
+          (progn
+            (if line
+                (push line result))
+            (setf line (read-line file-stream nil nil)
+                  count (+ 1 count)
+                  op-endp t))
 
-            (destructuring-bind (op start end content) (nth op-id operations)
-              (cond ((or (and start (< count start))
-                         (and end (> count end)))
-                     (format str "~A~%" line)
+          (destructuring-bind (op start end content) (nth op-id operations)
+            (cond ((or (and start (< count start))
+                       (and end (> count end)))
+                   (push line result)
+                   (setf line (read-line file-stream nil nil)
+                         count (+ 1 count)))
+
+                  ((eq op :add)
+                   (when (and start (= start count))
+                     (incf op-id)
+                     (push content result)
+                     (if line
+                         (push line result))
                      (setf line (read-line file-stream nil nil)
-                           count (+ 1 count)))
+                           count (+ 1 count))))
 
-                    ((eq op :add)
-                     (when (and start (= start count))
-                       (incf op-id)
-                       (format str "~A~%~A~%" content line)
+                  ((eq op :replace)
+                   (when (and start (= start count))
+                     (push content result))
+                   (when (and start end
+                              (<= start count end))
+                     (if (= end count)
+                         (incf op-id))
+
+                     (setf line (read-line file-stream nil nil)
+                           count (+ 1 count))))
+
+                  ((eq op :remove)
+                   (if (and end (= count end))
+                       (incf op-id))
+                   (if (and end (<= count end))
                        (setf line (read-line file-stream nil nil)
-                             count (+ 1 count))))
-
-                    ((eq op :replace)
-                     (when (and start (= start count))
-                       (format str "~A~%" content))
-                     (when (and start end
-                                (<= start count end))
-                       (if (= end count)
-                           (incf op-id))
-
-                       (setf line (read-line file-stream nil nil)
-                             count (+ 1 count))))
-
-                    ((eq op :remove)
-                     (if (and end (<= count end))
-                         (setf line (read-line file-stream nil nil)
-                               count (+ 1 count)))
-                     (if (and end (= count end))
-                         (incf op-id))))))))))
+                             count (+ 1 count))))))))))
 
 (defclass dir-tool (tool)
   ((name :initform "dir_command")

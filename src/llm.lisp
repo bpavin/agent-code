@@ -235,20 +235,25 @@ These are tool descriptions:~%~%~A"
         (llm-response:text (car (history this))))))
 
 (defmethod handle-function-call ((this llm) persona tool-name args)
-  (dolist (tool (get-tools this persona))
-    (when (string-equal tool-name (tool:name tool))
-      (log:debug "Executing tool [name=~A, args=~A]" tool-name args)
-      (cond ((string-equal tool-name +memory-tool-name+)
-             (let ((memory-result (update-memory tool this args)))
-               (compress-history this)
-               (return-from handle-function-call memory-result)))
+  (let ((tool-called-p nil))
+   (dolist (tool (get-tools this persona))
+     (when (string-equal tool-name (tool:name tool))
+       (setf tool-called-p t)
+       (log:debug "Executing tool [name=~A, args=~A]" tool-name args)
+       (cond ((string-equal tool-name +memory-tool-name+)
+              (let ((memory-result (update-memory tool this args)))
+                (compress-history this)
+                (return-from handle-function-call memory-result)))
 
-            (T
-             (let ((tool-result (tool:tool-execute tool this args)))
+             (T
+              (let ((tool-result (tool:tool-execute tool this args)))
 
-               (log-tool-result tool-name args tool-result)
+                (log-tool-result tool-name args tool-result)
 
-               (return-from handle-function-call tool-result)))))))
+                (return-from handle-function-call tool-result))))))
+
+    (when (null tool-called-p)
+      (error "Tool was not found: ~A" tool-name))))
 
 (defun log-tool-result (tool-name args tool-result)
   (if (log:trace)
