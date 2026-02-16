@@ -247,8 +247,10 @@ Safety checks: max 1 operation, no overlapping line ranges."))
         (error "File path must be defined."))
 
     (let* ((operation (aget args :operation))
-           (start (aget args :start-line))
-           (end (aget args :end-line))
+           (start-str (aget args :start-line))
+           (start (and start-str (parse-integer start-str)))
+           (end-str (aget args :end-line))
+           (end (and end-str (parse-integer end-str)))
            (content (or (aget args :content) "")))
 
       (alexandria:switch (operation :test #'string-equal)
