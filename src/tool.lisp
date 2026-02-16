@@ -198,6 +198,7 @@ What the parts mean
   ((name :initform "line_edit")
    (project-directory :initarg :project-directory :accessor project-directory)
    (description :initform "Edit file by specifying lines that must be added, replaced or removed.
+CRITICAL: In case change is including only one single line, end-line is equal to start-line.
 
 Example:
 Add new line at the start of the file:
