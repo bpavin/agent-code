@@ -220,18 +220,15 @@ Ranges must not overlap.
 ")
    (properties :initform '((:file-path . ((:type . :string)
                                           (:description . "Absolute path of the file.")))
-                           (:operations .
-                            ((:type . :array)
-                             (:description . "Array of operations")
-                             (:operation . ((:type . :string)
-                                            (:description . "Operation that will be executed on the file.
+                           (:operation . ((:type . :string)
+                                          (:description . "Operation that will be executed on the file.
 Can be one of: add, remove or replace.")))
-                             (:start-line . ((:type . :integer)
-                                             (:description . "Start line of the change. First line in the file starts with 1.")))
-                             (:end-line . ((:type . :integer)
-                                           (:description . "End line of the change. In case change is including single line, end-line is equal to start-line.")))
-                             (:content . ((:type . :string)
-                                          (:description . "Content that will be applied to the file. Required for add and replace operations.")))))))
+                           (:start-line . ((:type . :integer)
+                                           (:description . "Start line of the change. First line in the file starts with 1.")))
+                           (:end-line . ((:type . :integer)
+                                         (:description . "End line of the change. In case change is including single line, end-line is equal to start-line.")))
+                           (:content . ((:type . :string)
+                                        (:description . "Content that will be applied to the file. Required for add and replace operations.")))))
    (required :initform '(:file-path :operations :start-line :end-line)))
   (:documentation "Tool for performing line-based edits with context validation.
 Input: JSON array of operations with structure:
@@ -245,53 +242,43 @@ Safety checks: max 1 operation, no overlapping line ranges."))
 
 (defmethod tool-execute ((tool line-edit-tool) llm args)
   (let ((path (aget args :file-path))
-        (operations (aget args :operations))
-        (max-operations 1)
         (op-list nil))
     (if (null path)
         (error "File path must be defined."))
-    (if (null operations)
-        (error "Operations are not defined."))
-    (if (> (length operations) max-operations)
-        (error "Too many operations: ~a (max ~a)" (length operations) max-operations))
 
-    (dolist (op-alist operations)
-      (let* ((operation (aget op-alist :operation))
-             (start (aget op-alist :start-line))
-             (end (aget op-alist :end-line))
-             (content (or (aget op-alist :content) "")))
+    (let* ((operation (aget args :operation))
+           (start (aget args :start-line))
+           (end (aget args :end-line))
+           (content (or (aget args :content) "")))
 
-        (alexandria:switch (operation :test #'string-equal)
-          ("add"
-           (if (or (null start) (null end) (null content))
-               (error "~S operation must have start-line, end-line and content." operation))
-           (setf operation :add))
+      (alexandria:switch (operation :test #'string-equal)
+        ("add"
+         (if (or (null start) (null end) (null content))
+             (error "~S operation must have start-line, end-line and content." operation))
+         (setf operation :add))
 
-          ("remove"
-           (if (or (null start) (null end))
-               (error "~S operation must have start-line and end-line." operation))
-           (setf operation :remove))
+        ("remove"
+         (if (or (null start) (null end))
+             (error "~S operation must have start-line and end-line." operation))
+         (setf operation :remove))
 
-          ("replace"
-           (if (or (null start) (null end) (null content))
-               (error "~S operation must have start-line, end-line and content." operation))
+        ("replace"
+         (if (or (null start) (null end) (null content))
+             (error "~S operation must have start-line, end-line and content." operation))
 
-           (setf operation :replace))
+         (setf operation :replace))
 
-          (t
-           (error "~A operations is invalid." operation)))
+        (t
+         (error "~A operation is invalid." operation)))
 
-        (if (< start 1)
-            (error "Lines must start with 1. start-line ~A is invalid." start))
+      (if (< start 1)
+          (error "Lines must start with 1. start-line ~A is invalid." start))
 
-        (if (< end start)
-            (error "end-line must be greater or equal to start-line. start-line: ~A, end-line: ~A" start end))
+      (if (< end start)
+          (error "end-line must be greater or equal to start-line. start-line: ~A, end-line: ~A" start end))
 
-        (push (list operation start end content)
-              op-list)))
-
-    (setf op-list
-          (sort op-list (lambda (l r) (<= (second l) (second r)))))
+      (push (list operation start end content)
+            op-list))
 
     (if (>= (length op-list) 2)
         (do ((i 1 (+ i 1)))

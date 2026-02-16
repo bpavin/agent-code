@@ -65,6 +65,8 @@ collect subagents answers and presenting the final answer to the user.
 Give detailed instructions to subagents. Include all the relevant context about the question.
 CRITICAL: Include the summary of the context to the subagent.
 
+You are not allowed to make changes without user's permission. Ask user for permission first.
+
 You must always produce some output for the user or use a tool."))
 
 (defparameter analyzing-persona
