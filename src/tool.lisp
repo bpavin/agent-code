@@ -50,7 +50,8 @@
 
 (defclass read-many-files-tool (tool)
   ((name :initform "read_many_files")
-   (description :initform "Reads multiple files from the disk. Input is array of paths to read.")
+   (description :initform "Reads multiple files from the disk. Input is array of paths to read.
+Files are prepended with line numbers separated from file content with character |.")
    (properties :initform '((:paths . ((:type . :array)
                                       (:description . "Array of the absolute paths of the files. Directories are not allowed. Wildcards are not allowed.")))))
    (required :initform '(:paths))))
@@ -67,7 +68,14 @@
         (format out "----- ~A -----~%~%~A~%~%" path (read-file path))))))
 
 (defun read-file (path)
-  (alexandria:read-file-into-string path))
+  (with-output-to-string (str)
+    (with-open-file (stream path :direction :input)
+      (do ((count 1 (+ count 1))
+           (line (read-line stream nil nil)))
+          ((null line)
+           str)
+        (format str "~A|~A~%" count line)
+        (setf line (read-line stream nil nil))))))
 
 (defclass write-tool (tool)
   ((name :initform "write_file")
