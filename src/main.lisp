@@ -20,6 +20,10 @@
 
 (defun main (project-path)
   (log:config :debug)
+
+  (if (null lparallel:*kernel*)
+      (setf lparallel:*kernel* (lparallel:make-kernel 12)))
+
   (init :project-path project-path))
 
 (defun init (&key (project-path nil) (force-init-p t))
@@ -31,7 +35,8 @@
                                           (format nil "~A/agent-code.md" project-path)))
                     ;; :api-provider (make-instance 'api-provider:chat-completion-api-provider)
                     :api-provider (make-instance 'api-provider:responses-api-provider)
-                    :tools-enabled-p t)))
+                    :tools-enabled-p t
+                    :deep-thinking-p t)))
         (setf *ctx* this))))
 
 (defun initial-analysis ()

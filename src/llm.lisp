@@ -2,6 +2,7 @@
 	(:use :cl)
     (:nicknames :llm)
     (:import-from :cl-ppcre)
+    (:import-from :lparallel)
     (:import-from :defclass-std)
     (:import-from :agent-code/src/api-provider)
     (:import-from :agent-code/src/persona)
@@ -54,7 +55,10 @@
                 :accessor memory-tool)
    (tools :initform (list (make-instance 'subagent-tool))
           :initarg :tools
-          :accessor tools)))
+          :accessor tools)
+   (deep-thinking-p :initform t
+                    :initarg :deep-thinking-p
+                    :accessor deep-thinking-p)))
 
 (defmethod get-tools ((this llm) persona)
   (append (or (persona:tools persona) (tools this))
@@ -341,9 +345,33 @@ Use this index to specify which memory item you want to update. Index is mandato
     (let* ((persona
              (find-if (lambda (p) (string-equal name (persona:name p)))
                       (personas tool)))
-           (subagent (make-instance 'llm:llm
-                                    :project-path (project-path llm)
-                                    :project-summary (project-summary llm)
-                                    :tools (persona:tools persona))))
-      (log:info "Starting subagent ~A" name)
-      (llm:send-query subagent persona prompt nil))))
+           )
+      (cond ((and (deep-thinking-p llm) (persona:parallel-p persona))
+             (let* ((count 3)
+                    (subs (create-subagents llm persona count)))
+               (log:info "Starting ~A subagents ~A" count name)
+               (let ((results (lparallel:pmapcar
+                               (lambda (sub-llm)
+                                 (llm:send-query sub-llm persona prompt nil))
+                               subs)))
+                 (format nil "~{---- subagent response: -----~%~A~%~%~^~%~}" results))))
+
+            (t
+             (let ((subagent (make-instance 'llm:llm
+                                            :project-path (project-path llm)
+                                            :project-summary (project-summary llm)
+                                            :tools (persona:tools persona))))
+                   (log:info "Starting subagent ~A" name)
+                   (llm:send-query subagent persona prompt nil)))))))
+
+(defun create-subagents (llm persona count)
+  (let ((subagents)
+        (temps '(0.4 0.6 0.8)))
+   (dotimes (i count subagents)
+     (let ((sub (make-instance 'llm:llm
+                               :project-path (project-path llm)
+                               :project-summary (project-summary llm)
+                               :tools (persona:tools persona))))
+       (setf (api-provider:temperature (api-provider sub))
+             (nth i temps))
+      (push sub subagents)))))

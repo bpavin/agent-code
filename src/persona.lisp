@@ -19,7 +19,7 @@
      #:coding-persona
      #:planning-persona
      #:explore-persona
-     ))
+     #:parallel-p))
 
 (in-package :agent-code/src/persona)
 
@@ -30,7 +30,8 @@
    (developer
     user
     assistant)
-   (tools)))
+   (tools)
+   (parallel-p :std nil)))
 
 (defmethod get-user-prompt ((this persona) tools)
   (format nil (user this)
@@ -48,7 +49,8 @@
                  :name "base"
                  :description "General-purpose assistant for answering questions that don't require specialized analysis or file operations. Use for conceptual discussions, explanations, and simple queries without project context."
                  :system
-                 "You are helpfull assistant."))
+                 "You are helpfull assistant."
+                 :parallel-p t))
 
 (defparameter coordinator-persona
   (make-instance 'persona
@@ -106,6 +108,7 @@ You must always produce some output for the user or use a tool."))
   (make-instance 'persona
                  :name "analyzer"
                  :description "Project analysis specialist. Use when you need: high-level project summaries, architecture understanding, dependency analysis, or system overviews. Produces structured reports with sections for purpose, architecture, logic flow, and integrations."
+                 :parallel-p t
                  :tools (list (make-instance 'tool:read-many-files-tool)
                               ;(make-instance 'tool:dir-tool)
                               (make-instance 'tool:bash-tool))
@@ -172,6 +175,7 @@ Rules:
   (make-instance 'persona
                  :name "planner"
                  :description "Change planning specialist. Use when you need to: create detailed implementation plans, break down complex requests into actionable steps, specify exact file changes, or design solution architectures. Produces step-by-step plans with specific file references."
+                 :parallel-p t
                  :tools (list (make-instance 'tool:read-many-files-tool)
                               ;(make-instance 'tool:dir-tool)
                               (make-instance 'tool:bash-tool))
@@ -221,6 +225,7 @@ Output:
   (make-instance 'persona
                  :name "explorer"
                  :description "File system exploration specialist. Use when you need to: find specific files, examine file contents, explore project structure, search for patterns, or gather detailed file information. Uses systematic search strategies and provides comprehensive file analysis."
+                 :parallel-p t
                  :tools (list (make-instance 'tool:read-many-files-tool)
                               ;(make-instance 'tool:dir-tool)
                               (make-instance 'tool:bash-tool))

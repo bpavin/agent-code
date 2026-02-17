@@ -4,7 +4,7 @@
   :license ""
   :class :package-inferred-system
   :defsystem-depends-on (:asdf-package-system)
-  :depends-on ("agent-code/src/main")
+  :depends-on (#:lparallel #:cl-json "agent-code/src/main")
   :description ""
   :in-order-to ((test-op (test-op "agent-code/tests"))))
 

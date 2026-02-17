@@ -7,6 +7,7 @@
 	(:export
         #:api-provider
         #:url
+        #:temperature
         #:create-request
         #:handle-response
 
@@ -18,7 +19,8 @@
 (in-package :agent-code/src/api-provider)
 
 (defclass-std:defclass/std api-provider ()
-  ((url)))
+  ((url)
+   (temperature :std 0.6)))
 
 (defgeneric create-request (this model conversation tools))
 
@@ -38,7 +40,7 @@
                 ],
                 ~A
                 \"stream\": false,
-                \"temperature\": 0.6,
+                \"temperature\": ~F,
                 \"max_tokens\": 20000
             }"
           (cl-json:encode-json-to-string model)
@@ -48,7 +50,8 @@
                       "\"tools\": [
                           ~A
                       ],"
-                      (chat-completion-tools-as-json tools)))))
+                      (chat-completion-tools-as-json tools)))
+          (temperature this)))
 
 (defun chat-completion-tools-as-json (tools)
   (to-json-array
@@ -151,7 +154,7 @@
                 ],
                 ~A
                 \"stream\": false,
-                \"temperature\": 0.6,
+                \"temperature\": ~F,
                 \"max_output_tokens\": 20000
           }"
           (cl-json:encode-json-to-string model)
@@ -161,7 +164,8 @@
                       "\"tools\": [
                           ~A
                       ],"
-                      (responses-tools-as-json this tools)))))
+                      (responses-tools-as-json this tools)))
+          (temperature this)))
 
 (defmethod responses-tools-as-json ((this responses-api-provider) tools)
   (to-json-array
