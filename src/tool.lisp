@@ -206,7 +206,7 @@ Add new line at the start of the file:
 \"operation\": \"add\",
 \"startLine\": 1,
 \"endLine\": 1,
-\"content\": \"new line\"
+\"content\": \"add one new line on file start\"
 }
 
 Replace lines from lines 2 to 4:
@@ -302,7 +302,7 @@ Safety checks: max 1 operation, no overlapping line ranges."))
 
     (let ((edited-file (apply-changes-to-file path op-list)))
       (alexandria:write-string-into-file edited-file path :if-exists :supersede)
-      edited-file)))
+      "File was successfully edited.")))
 
 (defun apply-changes-to-file (file-path operations)
   (with-open-file (file-stream file-path :direction :input)
