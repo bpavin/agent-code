@@ -46,15 +46,14 @@
 (defparameter base-persona
   (make-instance 'persona
                  :name "base"
-                 :description "Used for general questions."
+                 :description "General-purpose assistant for answering questions that don't require specialized analysis or file operations. Use for conceptual discussions, explanations, and simple queries without project context."
                  :system
                  "You are helpfull assistant."))
 
 (defparameter coordinator-persona
   (make-instance 'persona
                  :name "coordinator"
-                 :description "Used for fulfilling user's commands by delegating tasks to subagents,
-collecting subagents answers and presenting the final answer to user."
+                 :description "Primary orchestrator that delegates tasks to specialized subagents. Analyzes user requests, determines optimal delegation strategy, requests permissions when needed, and synthesizes final answers. Always check permission requirements before delegating file modifications."
                  :system "You are a specialized coordinator AI responsible for task delegation and team management. Your role is to analyze complex requests, break them down into subtasks when necessary, delegate to appropriate specialized agents, synthesize their outputs, and present cohesive final solutions efficiently. You ensure all subagents have clear context and instructions. You prioritize efficiency and seek permission before making changes."
                  :user
                  "You are coordinator AI.
@@ -106,8 +105,7 @@ You must always produce some output for the user or use a tool."))
 (defparameter analyzing-persona
   (make-instance 'persona
                  :name "analyzer"
-                 :description "Used for analyzing the project. Main point is to collect high level information about the project
-and prepare summary report."
+                 :description "Project analysis specialist. Use when you need: high-level project summaries, architecture understanding, dependency analysis, or system overviews. Produces structured reports with sections for purpose, architecture, logic flow, and integrations."
                  :tools (list (make-instance 'tool:read-many-files-tool)
                               ;(make-instance 'tool:dir-tool)
                               (make-instance 'tool:bash-tool))
@@ -150,7 +148,7 @@ Use clear section headers exactly as listed above."))
 (defparameter coding-persona
   (make-instance 'persona
                  :name "coder"
-                 :description "Used for implementing planned changes."
+                 :description "Implementation specialist for code modifications. Use when you need to: write new code, modify existing files, implement planned changes, or fix bugs. Has write access tools for precise file editing and follows software engineering best practices."
                  :system "You are a specialized coding AI focused on precise implementation of planned changes. You follow software engineering best practices, write clean, maintainable code, and ensure all modifications are minimal, targeted, and preserve existing functionality. You understand that code is read more often than written."
                  :tools (list (make-instance 'tool:read-many-files-tool)
                               (make-instance 'tool:write-tool)
@@ -173,7 +171,7 @@ Rules:
 (defparameter planning-persona
   (make-instance 'persona
                  :name "planner"
-                 :description "Used for planning changes that were requested by the user."
+                 :description "Change planning specialist. Use when you need to: create detailed implementation plans, break down complex requests into actionable steps, specify exact file changes, or design solution architectures. Produces step-by-step plans with specific file references."
                  :tools (list (make-instance 'tool:read-many-files-tool)
                               ;(make-instance 'tool:dir-tool)
                               (make-instance 'tool:bash-tool))
@@ -222,7 +220,7 @@ Output:
 (defparameter explore-persona
   (make-instance 'persona
                  :name "explorer"
-                 :description "Used for exploring project. Finding specific files and content of the files."
+                 :description "File system exploration specialist. Use when you need to: find specific files, examine file contents, explore project structure, search for patterns, or gather detailed file information. Uses systematic search strategies and provides comprehensive file analysis."
                  :tools (list (make-instance 'tool:read-many-files-tool)
                               ;(make-instance 'tool:dir-tool)
                               (make-instance 'tool:bash-tool))
