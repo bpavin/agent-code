@@ -341,7 +341,6 @@ Use this index to specify which memory item you want to update. Index is mandato
     (if (null prompt)
         (error "Prompt not specified."))
 
-
     (let* ((persona
              (find-if (lambda (p) (string-equal name (persona:name p)))
                       (personas tool)))
@@ -354,7 +353,7 @@ Use this index to specify which memory item you want to update. Index is mandato
                                (lambda (sub-llm)
                                  (llm:send-query sub-llm persona prompt nil))
                                subs)))
-                 (format nil "~{---- subagent response: -----~%~A~%~%~^~%~}" results))))
+                 (format nil "~{---- subagent response: -----~%~A~^~%~%~}" results))))
 
             (t
              (let ((subagent (make-instance 'llm:llm
@@ -366,7 +365,7 @@ Use this index to specify which memory item you want to update. Index is mandato
 
 (defun create-subagents (llm persona count)
   (let ((subagents)
-        (temps '(0.4 0.6 0.8)))
+        (temps '(0.4 0.6 1.0)))
    (dotimes (i count subagents)
      (let ((sub (make-instance 'llm:llm
                                :project-path (project-path llm)
