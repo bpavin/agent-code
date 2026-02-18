@@ -66,6 +66,8 @@
               (list (memory-tool this)))))
 
 (defmethod send-query ((this llm) persona query history)
+  (if history
+      (setf (history this) history))
   (if query
       (add-history this (llm-response:create-message :user query)))
 
@@ -308,8 +310,8 @@ Use this index to specify which memory item you want to update. Index is mandato
 (defclass subagent-tool (tool:tool)
   ((tool:name :initform "execute_subagent")
    (tool:description :initform "Run standalone subagent to complete specific task.")
-   (personas :initform (list persona:analyzing-persona
-                             persona:explore-persona
+   (personas :initform (list ;persona:analyzing-persona
+                             ;persona:explore-persona
                              persona:planning-persona
                              persona:coding-persona)
              :accessor personas)
@@ -343,15 +345,19 @@ Use this index to specify which memory item you want to update. Index is mandato
 
     (let* ((persona
              (find-if (lambda (p) (string-equal name (persona:name p)))
-                      (personas tool)))
-           )
+                      (personas tool))))
+
       (cond ((and (deep-thinking-p llm) (persona:parallel-p persona))
              (let* ((count 3)
-                    (subs (create-subagents llm persona count)))
+                    (subs (create-subagents llm persona count))
+                    (response (last-in-history llm))
+                    (history (if (llm-response:role response)
+                                 (list response))))
+
                (log:info "Starting ~A subagents ~A" count name)
                (let ((results (lparallel:pmapcar
                                (lambda (sub-llm)
-                                 (llm:send-query sub-llm persona prompt nil))
+                                 (llm:send-query sub-llm persona prompt history))
                                subs)))
                  (format nil "~{---- subagent response: -----~%~A~^~%~%~}" results))))
 
