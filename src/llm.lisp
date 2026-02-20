@@ -311,7 +311,7 @@ Use this index to specify which memory item you want to update. Index is mandato
   ((tool:name :initform "execute_subagent")
    (tool:description :initform "Run standalone subagent to complete specific task.")
    (personas :initform (list ;persona:analyzing-persona
-                             ;persona:explore-persona
+                             persona:explore-persona
                              persona:planning-persona
                              persona:coding-persona)
              :accessor personas)
