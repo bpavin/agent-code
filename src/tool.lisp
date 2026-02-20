@@ -67,14 +67,16 @@ Files are prepended with line numbers separated from file content with character
       (dolist (path paths out)
         (format out "----- ~A -----~%~%~A~%~%" path (read-file path))))))
 
-(defun read-file (path)
+(defun read-file (path &optional (line-start 1) line-end)
   (with-output-to-string (str)
     (with-open-file (stream path :direction :input)
       (do ((count 1 (+ count 1))
            (line (read-line stream nil nil)))
-          ((null line)
+          ((or (null line)
+               (and line-end (>= count line-end)))
            str)
-        (format str "~A|~A~%" count line)
+        (if (>= count line-start)
+            (format str "~A|~A~%" count line))
         (setf line (read-line stream nil nil))))))
 
 (defclass write-tool (tool)
@@ -289,20 +291,26 @@ Safety checks: max 1 operation, no overlapping line ranges."))
           (error "end-line must be greater or equal to start-line. start-line: ~A, end-line: ~A" start end))
 
       (push (list operation start end content)
-            op-list))
+            op-list)
 
-    (if (>= (length op-list) 2)
-        (do ((i 1 (+ i 1)))
-            ((>= i (length op-list)))
-          (destructuring-bind (op-1 start-1 end-1 _) (nth (- i 1) op-list)
-            (destructuring-bind (op-2 start-2 end-2 _) (nth i op-list)
-              (if (>= end-1 start-2)
-                  (error "Overlapping operations are not allowed. start-line: ~A, end-line: ~A and start-line: ~A, end-line: ~A"
-                         start-1 end-1 start-2 end-2))))))
+      (if (>= (length op-list) 2)
+          (do ((i 1 (+ i 1)))
+              ((>= i (length op-list)))
+            (destructuring-bind (op-1 start-1 end-1 _) (nth (- i 1) op-list)
+              (destructuring-bind (op-2 start-2 end-2 _) (nth i op-list)
+                (if (>= end-1 start-2)
+                    (error "Overlapping operations are not allowed. start-line: ~A, end-line: ~A and start-line: ~A, end-line: ~A"
+                           start-1 end-1 start-2 end-2))))))
 
-    (let ((edited-file (apply-changes-to-file path op-list)))
-      (alexandria:write-string-into-file edited-file path :if-exists :supersede)
-      "File was successfully edited.")))
+      (let ((edited-file (apply-changes-to-file path op-list)))
+        (alexandria:write-string-into-file edited-file path :if-exists :supersede)
+
+        (format nil "File was successfully edited.~%~%Changes with a few surrounding lines:~%~A"
+                (read-file path
+                           (max 1 (- start 5))
+                           (if (eq operation :replace)
+                               (+ (length content) 5)
+                               (+ end 5))))))))
 
 (defun apply-changes-to-file (file-path operations)
   (with-open-file (file-stream file-path :direction :input)

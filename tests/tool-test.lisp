@@ -54,7 +54,7 @@
              (tool:tool-execute (make-instance 'tool:line-edit-tool)
                                 nil
                                 `((:file-path . ,temp-file)
-                                  (:operation . "add") (:start-line . 1) (:end-line . 1) (:content . "new-line")))
+                                  (:operation . "add") (:start-line . "1") (:end-line . "1") (:content . "new-line")))
              (ok (string= expected (alexandria:read-file-into-string temp-file))))
         (ignore-errors (delete-file temp-file))))))
 
@@ -72,7 +72,7 @@
              (tool:tool-execute (make-instance 'tool:line-edit-tool)
                                 nil
                                 `((:file-path . ,temp-file)
-                                  (:operation . "remove") (:start-line . 1) (:end-line . 1)))
+                                  (:operation . "remove") (:start-line . "1") (:end-line . "1")))
              (ok (string= expected (alexandria:read-file-into-string temp-file))))
         (ignore-errors (delete-file temp-file))))))
 
@@ -90,7 +90,7 @@
              (tool:tool-execute (make-instance 'tool:line-edit-tool)
                                 nil
                                 `((:file-path . ,temp-file)
-                                  (:operation . "replace") (:start-line . 1) (:end-line . 1) (:content . "replaced")))
+                                  (:operation . "replace") (:start-line . "1") (:end-line . "1") (:content . "replaced")))
              (ok (string= expected (alexandria:read-file-into-string temp-file))))
         (ignore-errors (delete-file temp-file))))))
 
@@ -186,7 +186,7 @@
                      (tool:tool-execute (make-instance 'tool:line-edit-tool)
                                         nil
                                         `((:file-path . ,temp-file)
-                                          (:operation . "add") (:start-line . 0) (:end-line . 0) (:content . "new-line")))
+                                          (:operation . "add") (:start-line . "0") (:end-line . "0") (:content . "new-line")))
                      'error)))
         (ignore-errors (delete-file temp-file))))))
 
