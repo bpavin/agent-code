@@ -19,7 +19,8 @@
      #:coding-persona
      #:planning-persona
      #:explore-persona
-     #:parallel-p))
+     #:parallel-p
+     #:before-in-chain))
 
 (in-package :agent-code/src/persona)
 
@@ -31,6 +32,7 @@
     user
     assistant)
    (tools)
+   (before-in-chain :std nil)
    (parallel-p :std nil)))
 
 (defmethod get-user-prompt ((this persona) tools)
@@ -180,6 +182,7 @@ Use clear section headers exactly as listed above."))
                  :name "coder"
                  :description "Implementation specialist for code modifications. Use when you need to: write new code, modify existing files, implement planned changes, or fix bugs. Has write access tools for precise file editing and follows software engineering best practices."
                  :system "You are a specialized coding AI focused on precise implementation of planned changes. You follow software engineering best practices, write clean, maintainable code, and ensure all modifications are minimal, targeted, and preserve existing functionality. You understand that code is read more often than written."
+                 :before-in-chain "planner"
                  :tools (list (make-instance 'tool:read-many-files-tool)
                               (make-instance 'tool:write-tool)
                               ;(make-instance 'tool:edit-file-tool)
@@ -203,6 +206,7 @@ Rules:
                  :name "planner"
                  :description "Change planning specialist. Use when you need to: create detailed implementation plans, break down complex requests into actionable steps, specify exact file changes, or design solution architectures. Produces step-by-step plans with specific file references."
                  :parallel-p t
+                 :before-in-chain "explorer"
                  :tools (list (make-instance 'tool:read-many-files-tool)
                               ;(make-instance 'tool:dir-tool)
                               (make-instance 'tool:bash-tool))
@@ -253,6 +257,7 @@ Output:
                  :name "explorer"
                  :description "File system exploration specialist. Use when you need to: find specific files, examine file contents, explore project structure, search for patterns, or gather detailed file information. Uses systematic search strategies and provides comprehensive file analysis."
                  :parallel-p t
+                 :before-in-chain "explorer"
                  :tools (list (make-instance 'tool:read-many-files-tool)
                               ;(make-instance 'tool:dir-tool)
                               (make-instance 'tool:bash-tool))

@@ -56,9 +56,11 @@
    (tools :initform (list (make-instance 'subagent-tool))
           :initarg :tools
           :accessor tools)
-   (deep-thinking-p :initform t
+   (deep-thinking-p :initform nil
                     :initarg :deep-thinking-p
-                    :accessor deep-thinking-p)))
+                    :accessor deep-thinking-p)
+   (last-subagent-response :initform (make-hash-table)
+                           :accessor last-subagent-response)))
 
 (defmethod get-tools ((this llm) persona)
   (append (or (persona:tools persona) (tools this))
@@ -362,12 +364,24 @@ Use this index to specify which memory item you want to update. Index is mandato
                  (format nil "~{---- subagent response: -----~%~A~^~%~%~}" results))))
 
             (t
-             (let ((subagent (make-instance 'llm:llm
-                                            :project-path (project-path llm)
-                                            :project-summary (project-summary llm)
-                                            :tools (persona:tools persona))))
-                   (log:info "Starting subagent ~A" name)
-                   (llm:send-query subagent persona prompt nil)))))))
+             (log:info "Starting subagent ~A" name)
+             (break)
+             (let* ((subagent (make-instance 'llm:llm
+                                             :project-path (project-path llm)
+                                             :project-summary (project-summary llm)
+                                             :tools (persona:tools persona)))
+                    (history (multiple-value-bind (i existsp)
+                                 (gethash (sxhash (persona:before-in-chain persona))
+                                          (last-subagent-response llm))
+                               (if existsp
+                                   (list (llm-response:create-message :assistant i)))))
+                    (response (llm:send-query subagent persona
+                                              prompt history)))
+
+               (setf (gethash (sxhash name) (last-subagent-response llm))
+                     response)
+
+               response))))))
 
 (defun create-subagents (llm persona count)
   (let ((subagents)
