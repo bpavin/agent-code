@@ -136,3 +136,77 @@
                      'error)))
         (ignore-errors (delete-file temp-file))))))
 
+(deftest test-line-edit-tool-overlapping-operations
+  (testing "Applies overlapping add operations correctly"
+    (let* ((project-dir (asdf:system-source-directory :agent-code))
+           (file (merge-pathnames (format nil "temp-overlap-~d.txt" (get-universal-time)) project-dir))
+           (temp-file (format nil "~A" file))
+           (expected (format nil "new2~%new1~%original")))
+      (unwind-protect
+           (progn
+             (with-open-file (s temp-file :direction :output :if-exists :supersede :if-does-not-exist :create)
+               (write-line "original" s))
+             (tool:tool-execute (make-instance 'tool:line-edit-tool)
+                                nil
+                                `((:file-path . ,temp-file)
+                                  (:operation . "add") (:start-line . "1") (:end-line . "1") (:content . "new1")))
+             (tool:tool-execute (make-instance 'tool:line-edit-tool)
+                                nil
+                                `((:file-path . ,temp-file)
+                                  (:operation . "add") (:start-line . "1") (:end-line . "1") (:content . "new2")))
+             (ok (string= expected (alexandria:read-file-into-string temp-file))))
+        (ignore-errors (delete-file temp-file))))))
+
+(deftest test-line-edit-tool-invalid-range
+  (testing "Rejects operations where end-line < start-line"
+    (let* ((project-dir (asdf:system-source-directory :agent-code))
+           (file (merge-pathnames (format nil "temp-invalid-range-~d.txt" (get-universal-time)) project-dir))
+           (temp-file (format nil "~A" file)))
+      (unwind-protect
+           (progn
+             (with-open-file (s temp-file :direction :output :if-exists :supersede :if-does-not-exist :create)
+               (write-line "line1" s))
+             (ok (signals
+                     (tool:tool-execute (make-instance 'tool:line-edit-tool)
+                                        nil
+                                        `((:file-path . ,temp-file)
+                                          (:operation . "replace") (:start-line . "2") (:end-line . "1") (:content . "invalid")))
+                     'error)))
+        (ignore-errors (delete-file temp-file))))))
+
+(deftest test-line-edit-tool-replace-multi-line
+  (testing "Replaces multiple lines with multi-line content"
+    (let* ((project-dir (asdf:system-source-directory :agent-code))
+           (file (merge-pathnames (format nil "temp-multi-replace-~d.txt" (get-universal-time)) project-dir))
+           (temp-file (format nil "~A" file))
+           (expected (format nil "replaced1~%replaced2~%line3")))
+      (unwind-protect
+           (progn
+             (with-open-file (s temp-file :direction :output :if-exists :supersede :if-does-not-exist :create)
+               (write-line "line1" s)
+               (write-line "line2" s)
+               (write-line "line3" s))
+             (tool:tool-execute (make-instance 'tool:line-edit-tool)
+                                nil
+                                `((:file-path . ,temp-file)
+                                  (:operation . "replace") (:start-line . "1") (:end-line . "2") (:content . "replaced1
+replaced2")))
+             (ok (string= expected (alexandria:read-file-into-string temp-file))))
+        (ignore-errors (delete-file temp-file))))))
+
+(deftest test-line-edit-tool-beyond-file-length
+  (testing "Handling edits beyond file length"
+    (let* ((project-dir (asdf:system-source-directory :agent-code))
+           (file (merge-pathnames (format nil "temp-beyond-~d.txt" (get-universal-time)) project-dir))
+           (temp-file (format nil "~A" file))
+           (expected (format nil "line1~%~%new")))
+      (unwind-protect
+           (progn
+             (with-open-file (s temp-file :direction :output :if-exists :supersede :if-does-not-exist :create)
+               (write-line "line1" s))
+             (tool:tool-execute (make-instance 'tool:line-edit-tool)
+                                nil
+                                `((:file-path . ,temp-file)
+                                  (:operation . "add") (:start-line . "3") (:end-line . "3") (:content . "new")))
+             (ok (string= expected (alexandria:read-file-into-string temp-file))))
+        (ignore-errors (delete-file temp-file))))))

@@ -259,12 +259,16 @@ Safety checks: max 1 operation, no overlapping line ranges."))
 
     (let* ((operation (aget args :operation))
            (start-str (aget args :start-line))
-           (start (and start-str (parse-integer start-str)))
+           (start (if (and start-str (stringp start-str))
+                      (parse-integer start-str)
+                      start-str))
            (end-str (aget args :end-line))
-           (end (and end-str (parse-integer end-str)))
+           (end (if (and end-str (stringp end-str))
+                      (parse-integer end-str)
+                      end-str))
            (content (or (aget args :content) "")))
 
-      (alexandria:switch (operation :test #'string-equal)
+      (alexandria:switch ((string operation) :test #'string-equal)
         ("add"
          (if (or (null start) (null end) (null content))
              (error "~S operation must have start-line, end-line and content." operation))
@@ -292,15 +296,6 @@ Safety checks: max 1 operation, no overlapping line ranges."))
 
       (push (list operation start end content)
             op-list)
-
-      (if (>= (length op-list) 2)
-          (do ((i 1 (+ i 1)))
-              ((>= i (length op-list)))
-            (destructuring-bind (op-1 start-1 end-1 _) (nth (- i 1) op-list)
-              (destructuring-bind (op-2 start-2 end-2 _) (nth i op-list)
-                (if (>= end-1 start-2)
-                    (error "Overlapping operations are not allowed. start-line: ~A, end-line: ~A and start-line: ~A, end-line: ~A"
-                           start-1 end-1 start-2 end-2))))))
 
       (let ((edited-file (apply-changes-to-file path op-list)))
         (alexandria:write-string-into-file edited-file path :if-exists :supersede)
