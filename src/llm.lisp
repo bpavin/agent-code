@@ -352,36 +352,44 @@ Use this index to specify which memory item you want to update. Index is mandato
       (cond ((and (deep-thinking-p llm) (persona:parallel-p persona))
              (let* ((count 3)
                     (subs (create-subagents llm persona count))
-                    (response (last-in-history llm))
-                    (history (if (llm-response:role response)
-                                 (list response))))
+                    (history (get-last-subagent-response llm persona)))
 
                (log:info "Starting ~A subagents ~A" count name)
-               (let ((results (lparallel:pmapcar
-                               (lambda (sub-llm)
-                                 (llm:send-query sub-llm persona prompt history))
-                               subs)))
-                 (format nil "~{---- subagent response: -----~%~A~^~%~%~}" results))))
+
+               (let* ((results (lparallel:pmapcar
+                                (lambda (sub-llm)
+                                  (llm:send-query sub-llm persona prompt history))
+                                subs))
+                      (response (format nil "~{---- subagent response: -----~%~A~^~%~}" results)))
+
+                 (put-last-subagent-response llm name response)
+
+                 response)))
 
             (t
              (log:info "Starting subagent ~A" name)
-             (break)
              (let* ((subagent (make-instance 'llm:llm
                                              :project-path (project-path llm)
                                              :project-summary (project-summary llm)
                                              :tools (persona:tools persona)))
-                    (history (multiple-value-bind (i existsp)
-                                 (gethash (sxhash (persona:before-in-chain persona))
-                                          (last-subagent-response llm))
-                               (if existsp
-                                   (list (llm-response:create-message :assistant i)))))
+                    (history (get-last-subagent-response llm persona))
                     (response (llm:send-query subagent persona
                                               prompt history)))
 
-               (setf (gethash (sxhash name) (last-subagent-response llm))
-                     response)
+               (put-last-subagent-response llm name response)
 
                response))))))
+
+(defun get-last-subagent-response (llm persona)
+  (multiple-value-bind (i existsp)
+      (gethash (sxhash (persona:before-in-chain persona))
+               (last-subagent-response llm))
+    (if existsp
+        (list (llm-response:create-message :assistant i)))))
+
+(defun put-last-subagent-response (llm name response)
+  (setf (gethash (sxhash name) (last-subagent-response llm))
+        response))
 
 (defun create-subagents (llm persona count)
   (let ((subagents)
