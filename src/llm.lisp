@@ -78,9 +78,13 @@
     (when (log:debug)
       (log:debug "LLM response: ~A" (cl-ppcre:regex-replace-all "\\s+" api-response " ")))
 
-    (let ((llm-responses (api-provider:handle-response (api-provider this) api-response)))
-
-      (act-on-llm-response this persona llm-responses))))
+    (handler-case
+        (let ((llm-responses (api-provider:handle-response (api-provider this) api-response)))
+          (act-on-llm-response this persona llm-responses))
+      (error (e)
+        (send-query this persona
+                    (format nil "Response was invalid: ~A" e)
+                    history)))))
 
 (defmethod compress-history ((this llm))
   "Remove all history entries that are considered old."
@@ -103,17 +107,28 @@
     (request-post this content)))
 
 (defun request-post (this content)
-  (let ((url (format nil "~A~A" (host this) (api-provider:url (api-provider this)))))
+  (let (result
+        (url (format nil "~A~A" (host this) (api-provider:url (api-provider this)))))
     (when (log:debug)
       (log:debug "~A~%~A" url (cl-ppcre:regex-replace-all "\\s+" content " ")))
 
-    (dex:post url
-              :insecure t
-              :read-timeout 60000
-              :headers `(("Content-type" . "application/json")
-                         ,(if (api-key this)
-                              `("Authorization" . ,(format nil "Bearer ~A" (api-key this)))))
-              :content content)))
+    (do ((retry t))
+        ((null retry)
+         result)
+      (handler-case
+          (progn
+            (setf result
+                  (dex:post url
+                            :insecure t
+                            :read-timeout 60000
+                            :headers `(("Content-type" . "application/json")
+                                       ,(if (api-key this)
+                                            `("Authorization" . ,(format nil "Bearer ~A" (api-key this)))))
+                            :content content))
+            (setf retry nil))
+        (dex:http-request-too-many-requests (e)
+          (log:warn "~A" e)
+          (sleep 5))))))
 
 (defmethod clear-history ((this llm))
   (setf (history this) nil))

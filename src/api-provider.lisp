@@ -187,7 +187,7 @@
                              :output-type (alexandria:assoc-value output :type)
                              :call-id (alexandria:assoc-value output :call--id)
                              :name (alexandria:assoc-value output :name)
-                             :arguments (decode-json (alexandria:assoc-value output :arguments))
+                             :arguments (decode-json (alexandria:assoc-value output :arguments) :throwp t)
                              :role (alexandria:assoc-value output :role)
                              :text result)
               llm-responses)))
@@ -197,13 +197,15 @@
 (defun sanitize (str)
   (cl-ppcre:regex-replace-all "```(json)?" str ""))
 
-(defun decode-json (str)
+(defun decode-json (str &key (throwp nil))
   (if str
       (handler-case
           (cl-json:decode-json-from-string str)
         (error (e)
           (log:warn "Invalid JSON: ~A" e)
-          (format nil "~A" e)))))
+          (format nil "~A" e)
+          (if throwp
+              (error e))))))
 
 (defmethod create-response ((this responses-api-provider) llm-response)
   (let ((out-type (llm-response:output-type llm-response)))
