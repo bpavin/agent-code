@@ -395,12 +395,14 @@ Use this index to specify which memory item you want to update. Index is mandato
 
                response))))))
 
-(defun get-last-subagent-response (llm persona)
-  (multiple-value-bind (i existsp)
-      (gethash (sxhash (persona:before-in-chain persona))
-               (last-subagent-response llm))
-    (if existsp
-        (list (llm-response:create-message :assistant i)))))
+(defun get-last-subagent-response (llm persona &key name)
+  (if (or persona name)
+      (multiple-value-bind (i existsp)
+          (gethash (sxhash (if name name (persona:before-in-chain persona)))
+                   (last-subagent-response llm))
+        (if existsp
+            (list (llm-response:create-message :assistant i))
+            (get-last-subagent-response llm nil :name (persona:name persona))))))
 
 (defun put-last-subagent-response (llm name response)
   (setf (gethash (sxhash name) (last-subagent-response llm))
