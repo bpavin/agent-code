@@ -377,8 +377,7 @@ Use this index to specify which memory item you want to update. Index is mandato
       (cond ((and (deep-thinking-p llm) (persona:parallel-p persona))
              (let* ((count 3)
                     (subs (create-subagents llm persona count))
-                    (history (append (get-last-subagent-response llm persona)
-                                     (get-last-subagent-response llm nil :name (persona:name persona)))))
+                    (history (create-subagent-history llm persona)))
 
                (signal 'conditions:tool-call
                        :text (format nil "Starting ~A subagent" count) :name name)
@@ -398,14 +397,18 @@ Use this index to specify which memory item you want to update. Index is mandato
                                              :project-path (project-path llm)
                                              :project-summary (project-summary llm)
                                              :tools (persona:tools persona)))
-                    (history (append (get-last-subagent-response llm persona)
-                                     (get-last-subagent-response llm nil :name (persona:name persona))))
+                    (history (create-subagent-history llm persona))
                     (response (llm:send-query subagent persona
                                               prompt history)))
 
                (put-last-subagent-response llm name response)
 
                response))))))
+
+(defun create-subagent-history (llm persona)
+  (append (get-last-subagent-response llm persona)
+          (if (not (string-equal (persona:before-in-chain persona) (persona:name persona)))
+              (get-last-subagent-response llm nil :name (persona:name persona)))))
 
 (defun get-last-subagent-response (llm persona &key name)
   (if (or persona name)
