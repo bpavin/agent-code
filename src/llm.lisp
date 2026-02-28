@@ -4,6 +4,7 @@
     (:import-from :cl-ppcre)
     (:import-from :lparallel)
     (:import-from :defclass-std)
+    (:import-from :agent-code/src/conditions)
     (:import-from :agent-code/src/api-provider)
     (:import-from :agent-code/src/persona)
     (:import-from :agent-code/src/tool)
@@ -78,6 +79,9 @@
     (when (log:debug)
       (log:debug "LLM response: ~A" (cl-ppcre:regex-replace-all "\\s+" api-response " ")))
 
+    (signal 'conditions:llm-response
+            :text "LLM response" :json api-response)
+
     (handler-case
         (let ((llm-responses (api-provider:handle-response (api-provider this) api-response)))
           (act-on-llm-response this persona llm-responses))
@@ -111,6 +115,9 @@
         (url (format nil "~A~A" (host this) (api-provider:url (api-provider this)))))
     (when (log:debug)
       (log:debug "~A~%~A" url (cl-ppcre:regex-replace-all "\\s+" content " ")))
+
+    (signal 'conditions:llm-request
+            :text "LLM request" :json content)
 
     (do ((retry t))
         ((null retry)
@@ -244,14 +251,15 @@ These are tool descriptions:~%~%~A"
 
                (add-history this llm-response)
                (add-history this
-                             (llm-response:create-function-output
-                              llm-response success result))))))
+                            (llm-response:create-function-output
+                             llm-response success result))))))
 
     (dolist (llm-response llm-responses)
       (cond ((string-equal "message" (llm-response:output-type llm-response))
              (if (not funcalls-p)
                  (add-history this llm-response))
-             (log:info (llm-response:text llm-response)))))
+             (signal 'conditions:llm-response
+                     :text (llm-response:text llm-response)))))
 
     (if funcalls-p
         (send-query this persona nil nil)
@@ -263,6 +271,10 @@ These are tool descriptions:~%~%~A"
      (when (string-equal tool-name (tool:name tool))
        (setf tool-called-p t)
        (log:debug "Executing tool [name=~A, args=~A]" tool-name args)
+
+       (signal 'conditions:tool-call
+               :text "Executing tool" :name tool-name :args args)
+
        (cond ((string-equal tool-name +memory-tool-name+)
               (let ((memory-result (update-memory tool this args)))
                 (compress-history this)
@@ -272,6 +284,9 @@ These are tool descriptions:~%~%~A"
               (let ((tool-result (tool:tool-execute tool this args)))
 
                 (log-tool-result tool-name args tool-result)
+
+                (signal 'conditions:tool-response
+                        :text "Tool executed suucessfully" :name tool-name :args args)
 
                 (return-from handle-function-call tool-result))))))
 
@@ -370,7 +385,8 @@ Use this index to specify which memory item you want to update. Index is mandato
                     (history (append (get-last-subagent-response llm persona)
                                      (get-last-subagent-response llm nil :name (persona:name persona)))))
 
-               (log:info "Starting ~A subagents ~A" count name)
+               (signal 'conditions:tool-call
+                       :text (format nil "Starting ~A subagent" count) :name name)
 
                (let* ((results (lparallel:pmapcar
                                 (lambda (sub-llm)
@@ -383,7 +399,6 @@ Use this index to specify which memory item you want to update. Index is mandato
                  response)))
 
             (t
-             (log:info "Starting subagent ~A" name)
              (let* ((subagent (make-instance 'llm:llm
                                              :project-path (project-path llm)
                                              :project-summary (project-summary llm)

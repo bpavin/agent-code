@@ -51,8 +51,10 @@
     (log:info "~%~A" response)))
 
 (defun ask-analysis (query)
-  (let ((response (llm:send-query *ctx* persona:analyzing-persona query nil)))
-    (log:info "~%~A" response)))
+  (handler-bind ((conditions:llm-condition
+                   (lambda (e)
+                     (log:info "~A" e))))
+      (llm:send-query *ctx* persona:analyzing-persona query nil)))
 
 (defun ask (query &key (mode :coordinator))
   (setf query (append-file-content query))
@@ -82,7 +84,11 @@
          (tmp (progn (setf (llm:mode *ctx*) mode))))
 
     (declare (ignore tmp))
-    (llm:send-query *ctx* persona query history)))
+    (handler-bind ((conditions:llm-condition
+                     (lambda (e)
+                       (let ((r (conditions:print-log e)))
+                         (if r (log:info "~A" r))))))
+      (llm:send-query *ctx* persona query history))))
 
 (defun append-file-content (query)
   (if query
