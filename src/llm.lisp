@@ -76,9 +76,6 @@
 
   (let* ((api-response (call-chat-completion this persona query)))
 
-    (when (log:debug)
-      (log:debug "LLM response: ~A" (cl-ppcre:regex-replace-all "\\s+" api-response " ")))
-
     (signal 'conditions:llm-response
             :text "LLM response" :json api-response)
 
@@ -113,8 +110,6 @@
 (defun request-post (this content)
   (let (result
         (url (format nil "~A~A" (host this) (api-provider:url (api-provider this)))))
-    (when (log:debug)
-      (log:debug "~A~%~A" url (cl-ppcre:regex-replace-all "\\s+" content " ")))
 
     (signal 'conditions:llm-request
             :text "LLM request" :json content)
@@ -283,20 +278,13 @@ These are tool descriptions:~%~%~A"
              (T
               (let ((tool-result (tool:tool-execute tool this args)))
 
-                (log-tool-result tool-name args tool-result)
-
                 (signal 'conditions:tool-response
-                        :text "Tool executed suucessfully" :name tool-name :args args)
+                        :text "Tool executed successfully" :name tool-name :args args)
 
                 (return-from handle-function-call tool-result))))))
 
     (when (null tool-called-p)
       (error "Tool was not found: ~A" tool-name))))
-
-(defun log-tool-result (tool-name args tool-result)
-  (if (log:trace)
-      (log:trace "Tool executed [name=~A, args=~A, result=~A]" tool-name args tool-result)
-      (log:debug "Tool executed successfully [name=~A]" tool-name)))
 
 (defparameter +memory-tool-name+ "update_memory")
 

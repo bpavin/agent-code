@@ -24,37 +24,36 @@
 (defgeneric print-log (this))
 
 (defmethod print-log ((this llm-condition))
-  (format nil "~A" (text this)))
+  (log:info "~A" (text this)))
 
 (define-condition llm-request (llm-condition)
   ((json :initarg :json :reader json :initform nil)))
 
 (defmethod print-log ((this llm-request))
-  (format nil "~A" (if (text this) (text this))))
+  (log:info "~A" (if (text this) (text this))))
 
 (define-condition llm-response (llm-condition)
   ((json :initarg :json :reader json :initform nil)))
 
 (defmethod print-log ((this llm-response))
-  (format nil "~A" (if (text this) (text this))))
+  (log:info "~A" (if (text this) (text this))))
 
 (define-condition tool-call (llm-condition)
   ((name :initarg :name :reader name :initform nil)
    (args :initarg :args :reader args :initform nil)))
 
 (defmethod print-log ((this tool-call))
-  (format nil "~A ~A args: ~A"
-          (if (text this) (text this))
-          (name this)
-          (if (args this)
-              (args this)
-              "no args")))
+  (if (log:debug)
+      (log:debug "~A name=~A args=~A" (if (text this) (text this))
+                 (name this) (args this))
+      (log:info "~A name=~A" (if (text this) (text this)) (name this))))
 
 (define-condition tool-response (llm-condition)
   ((name :initarg :name :reader name :initform nil)
    (args :initarg :args :reader args :initform nil)))
 
 (defmethod print-log ((this tool-response))
-  (format nil "~A ~A"
-          (if (text this) (text this))
-          (name this)))
+  (if (log:debug)
+      (log:debug "~A name=~A args=~A" (if (text this) (text this))
+                 (name this) (args this))
+      (log:info "~A name=~A" (if (text this) (text this)) (name this))))

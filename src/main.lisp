@@ -86,8 +86,7 @@
     (declare (ignore tmp))
     (handler-bind ((conditions:llm-condition
                      (lambda (e)
-                       (let ((r (conditions:print-log e)))
-                         (if r (log:info "~A" r))))))
+                       (conditions:print-log e))))
       (llm:send-query *ctx* persona query history))))
 
 (defun append-file-content (query)
