@@ -126,8 +126,11 @@
           (log:warn "~A" e)
           (sleep 5))
         (dex:http-request-bad-request (e)
+          (setf retry nil)
           (log:warn "request: ~A~%response: ~A" content e)
-          (error e))))))
+          (error e))
+
+        ))))
 
 (defmethod compress-history ((this llm))
   "Remove all history entries that are considered old."
