@@ -43,10 +43,8 @@
    (args :initarg :args :reader args :initform nil)))
 
 (defmethod print-log ((this tool-call))
-  (if (log:debug)
-      (log:debug "~A name=~A args=~A" (if (text this) (text this))
-                 (name this) (args this))
-      (log:info "~A name=~A" (if (text this) (text this)) (name this))))
+  (log:info "~A name=~A args=~A"
+            (if (text this) (text this)) (name this) (args this)))
 
 (define-condition tool-response (llm-condition)
   ((name :initarg :name :reader name :initform nil)

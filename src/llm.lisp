@@ -130,7 +130,10 @@
             (setf retry nil))
         (dex:http-request-too-many-requests (e)
           (log:warn "~A" e)
-          (sleep 5))))))
+          (sleep 5))
+        (dex:http-request-bad-request (e)
+          (log:warn "request: ~A~%response: ~A" content e)
+          (error e))))))
 
 (defmethod clear-history ((this llm))
   (setf (history this) nil))
