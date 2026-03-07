@@ -57,6 +57,10 @@
    (tools :initform (list (make-instance 'subagent-tool))
           :initarg :tools
           :accessor tools)
+   (tools-history :initform (make-hash-table :synchronized t)
+                  :initarg :tools-history
+                  :accessor tools-history
+                  :documentation "Map of previous tool calls. Key is tool name+args used.")
    (deep-thinking-p :initform nil
                     :initarg :deep-thinking-p
                     :accessor deep-thinking-p)
@@ -264,26 +268,34 @@ These are tool descriptions:~%~%~A"
         (llm-response:text (car (history this))))))
 
 (defmethod handle-function-call ((this llm) persona tool-name args)
-  (let ((tool-called-p nil))
-   (dolist (tool (get-tools this persona))
-     (when (string-equal tool-name (tool:name tool))
-       (setf tool-called-p t)
+  (let ((tool-called-p nil)
+        (tool-history-key (sxhash (list tool-name args))))
+    (multiple-value-bind (tool-call-count existsp) (gethash tool-history-key (tools-history this))
+      (when existsp
+        (setf (gethash tool-history-key (tools-history this)) (+ tool-call-count 1))
+        (error "Tool with the same arguments was already called!")))
 
-       (signal 'conditions:tool-call
-               :text "Executing tool" :name tool-name :args args)
+    (dolist (tool (get-tools this persona))
+      (when (string-equal tool-name (tool:name tool))
+        (setf tool-called-p t)
 
-       (cond ((string-equal tool-name +memory-tool-name+)
-              (let ((memory-result (update-memory tool this args)))
-                (compress-history this)
-                (return-from handle-function-call memory-result)))
+        (signal 'conditions:tool-call
+                :text "Executing tool" :name tool-name :args args)
 
-             (T
-              (let ((tool-result (tool:tool-execute tool this args)))
+        (cond ((string-equal tool-name +memory-tool-name+)
+               (let ((memory-result (update-memory tool this args)))
+                 (compress-history this)
+                 (return-from handle-function-call memory-result)))
 
-                (signal 'conditions:tool-response
-                        :text "Tool executed successfully" :name tool-name :args args)
+              (T
+               (let ((tool-result (tool:tool-execute tool this args)))
 
-                (return-from handle-function-call tool-result))))))
+                 (signal 'conditions:tool-response
+                         :text "Tool executed successfully" :name tool-name :args args)
+
+                 (setf (gethash tool-history-key (tools-history this)) 1)
+
+                 (return-from handle-function-call tool-result))))))
 
     (when (null tool-called-p)
       (error "Tool was not found: ~A" tool-name))))
