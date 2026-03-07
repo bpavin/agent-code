@@ -268,7 +268,6 @@ These are tool descriptions:~%~%~A"
    (dolist (tool (get-tools this persona))
      (when (string-equal tool-name (tool:name tool))
        (setf tool-called-p t)
-       (log:debug "Executing tool [name=~A, args=~A]" tool-name args)
 
        (signal 'conditions:tool-call
                :text "Executing tool" :name tool-name :args args)

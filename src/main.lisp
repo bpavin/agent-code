@@ -56,38 +56,15 @@
                      (log:info "~A" e))))
       (llm:send-query *ctx* persona:analyzing-persona query nil)))
 
-(defun ask (query &key (mode :coordinator))
+(defun ask (query)
   (setf query (append-file-content query))
 
-  (let* (history
-         (persona (case mode
-                    (:coordinator persona:coordinator-persona)
-                    (:base persona:base-persona)
-                    (:plan persona:planning-persona)
-                    (:implement (progn
-                                  (if (not (eq mode (llm:mode *ctx*)))
-                                      (let* ((request (llm:last-in-history *ctx*))
-                                             (funcalls
-                                               (mapcan (lambda (response)
-                                                         (if (or (string-equal "function_call" (llm-response:output-type response))
-                                                                 (string-equal "function_call_output" (llm-response:output-type response)))
-                                                             (list response)))
-                                                       (llm:history *ctx*)))
-                                             (tmp (llm:clear-history *ctx*)))
+  (let* ((persona persona:coordinator-persona))
 
-                                        (when request
-                                          (setf (llm-response:role request) :user)
-                                          (setf history (nconc (list request) funcalls)))))
-
-                                  persona:coding-persona))
-                    (:analyze persona:analyzing-persona)))
-         (tmp (progn (setf (llm:mode *ctx*) mode))))
-
-    (declare (ignore tmp))
     (handler-bind ((conditions:llm-condition
                      (lambda (e)
                        (conditions:print-log e))))
-      (llm:send-query *ctx* persona query history))))
+      (llm:send-query *ctx* persona query nil))))
 
 (defun append-file-content (query)
   (if query
