@@ -267,13 +267,7 @@ These are tool descriptions:~%~%~A"
         (llm-response:text (car (history this))))))
 
 (defmethod handle-function-call ((this llm) persona tool-name args)
-  (let ((tool-called-p nil)
-        (tool-history-key (sxhash (list tool-name args))))
-    (multiple-value-bind (tool-call-count existsp) (gethash tool-history-key (tools-history this))
-      (when existsp
-        (setf (gethash tool-history-key (tools-history this)) (+ tool-call-count 1))
-        (error "Tool with the same arguments was already called!")))
-
+  (let ((tool-called-p nil))
     (dolist (tool (get-tools this persona))
       (when (string-equal tool-name (tool:name tool))
         (setf tool-called-p t)
