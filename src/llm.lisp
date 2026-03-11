@@ -117,7 +117,6 @@
             (setf result
                   (dex:post url
                             :insecure t
-                            :read-timeout 60000
                             :headers `(("Content-type" . "application/json")
                                        ,(if (api-key this)
                                             `("Authorization" . ,(format nil "Bearer ~A" (api-key this)))))
