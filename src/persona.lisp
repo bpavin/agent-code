@@ -14,6 +14,7 @@
      #:tools
 
      #:base-persona
+     #:summary-persona
      #:coordinator-persona
      #:analyzing-persona
      #:coding-persona
@@ -53,6 +54,15 @@
                  :system
                  "You are helpfull assistant."
                  :parallel-p t))
+
+(defparameter summary-persona
+  (make-instance 'persona
+                 :name "summary"
+                 :description "Summarization assistant for purposes of compacting the previous conversations."
+                 :system
+                 "You are summarization assistant."
+                 :parallel-p nil
+                 :user "Summarize all of the conversation. Output numbered list of main points."))
 
 (defparameter coordinator-persona
   (make-instance 'persona

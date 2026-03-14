@@ -92,6 +92,7 @@
                     history)))))
 
 (defmethod send-request ((this llm) persona query)
+  (maybe-compress-history llm)
   (let* ((conversation (get-history this persona))
          (content (api-provider:create-request
                    (api-provider this)
@@ -101,6 +102,18 @@
                        (get-tools this persona)))))
 
     (request-post this content)))
+
+(defmethod maybe-compress-history ((llm llm))
+  "Compress oldest 10 history items (at end of stack) when total reaches 15."
+  (let ((history (llm-history llm)))
+    (when (=> (length history) 15)
+      (let* ((to-compress (subseq history 5))
+             (remaining (subseq history 0 5))
+             (summary (llm:send-query llm
+                                      persona:summary-persona
+                                      "Summarize the conversation"
+                                      to-compress)))
+        (setf (llm-history llm) (append remaining (list summary)))))))
 
 (defun request-post (this content)
   (let (result
