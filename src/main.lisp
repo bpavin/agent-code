@@ -12,7 +12,8 @@
    #:main
    #:ask
    #:initial-analysis
-   #:ask-analysis))
+   #:ask-analysis
+   #:validate-implementation))
 
 (in-package :agent-code/src/main)
 
@@ -72,4 +73,17 @@
                   (format nil "~A~% ----- ~A -----~%~A~%~%"
                           query file-path (alexandria:read-file-into-string file-path))))))
 
-  query)
+
+(defun validate-implementation (file-path &key (validation-types '("syntax-check" "test-run" "lint-check" "compile-check")))
+  "Run validation on implemented file."
+  (let* ((ctx *ctx*)
+         (validator-tool (make-instance 'tool:validation-tool))
+         (results))
+    
+    (dolist (vtype validation-types)
+      (push (tool:tool-execute validator-tool ctx 
+                               `((:validation-type . ,vtype)
+                                 (:target-path . ,file-path)))
+            results))
+    
+    (format nil "Validation Results for ~A:~%~{~A~^~%~}" file-path (reverse results))))

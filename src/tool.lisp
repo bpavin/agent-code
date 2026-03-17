@@ -2,6 +2,7 @@
 	(:use :cl)
     (:nicknames :tool)
     (:import-from :cl-json)
+    (:import-from :agent-code/validation-config)
 	(:export
      #:tool
 
@@ -21,7 +22,8 @@
      #:dir-tool
      #:edit-file-tool
      #:patch-tool
-     #:line-edit-tool))
+     #:line-edit-tool
+     #:validation-tool))
 
 (in-package :agent-code/src/tool)
 
@@ -389,4 +391,108 @@ Safety checks: max 1 operation, no overlapping line ranges."))
         (error err)
         (if (string-equal "" out)
             "Command was completed successfully."
+
+(defclass validation-tool (tool)
+  ((name :initform "run_validation")
+   (description :initform "Executes predefined validation functions on specified files or code sections. Returns validation results with success/error details.")
+   (properties :initform '((:validation-type . ((:type . :string)
+                                               (:description . "Type of validation to perform. Must be one of: syntax-check, test-run, lint-check, compile-check, custom-function.")))
+                          (:target-path . ((:type . :string)
+                                          (:description . "Absolute path to file or directory to validate.")))
+                          (:validation-function . ((:type . :string)
+                                                  (:description . "Custom validation function name (only for validation-type: custom-function).")))
+                          (:parameters . ((:type . :object)
+                                         (:description . "Additional parameters for the validation function.")))))
+   (required :initform '(:validation-type :target-path)))
+  (:documentation "Tool for running validation checks on code or files."))
+
+(defmethod tool-execute ((tool validation-tool) llm args)
+  (if (null args)
+      (error "No arguments specified for validation."))
+  
+  (let* ((validation-type (aget args :validation-type))
+         (target-path (aget args :target-path))
+         (validation-function (aget args :validation-function))
+         (parameters (aget args :parameters))
+         (file-type (agent-code/validation-config:file-type-from-extension target-path))
+         (result))
+    
+    (alexandria:switch (validation-type :test #'string-equal)
+      ("syntax-check"
+       (if (agent-code/validation-config:get-validation-rule file-type :syntax-check)
+           (setf result (validate-syntax target-path parameters))
+           (setf result '(:status "skipped" :details "Syntax check disabled for this file type"))))
+      ("test-run"
+       (let ((test-rule (agent-code/validation-config:get-validation-rule file-type :test-run)))
+         (cond ((eq test-rule :if-tests-exist)
+                (if (agent-code/validation-config:test-files-exist-p target-path)
+                    (setf result (run-tests target-path parameters))
+                    (setf result '(:status "skipped" :details "No test files found"))))
+               (test-rule
+                (setf result (run-tests target-path parameters)))
+               (t
+                (setf result '(:status "skipped" :details "Test run disabled for this file type"))))))
+      ("lint-check"
+       (let ((lint-rule (agent-code/validation-config:get-validation-rule file-type :lint-check)))
+         (cond ((eq lint-rule :warning-only)
+                (setf result (run-lint target-path (list* :warnings-only t parameters))))
+               (lint-rule
+                (setf result (run-lint target-path parameters)))
+               (t
+                (setf result '(:status "skipped" :details "Lint check disabled for this file type"))))))
+      ("compile-check"
+       (if (agent-code/validation-config:get-validation-rule file-type :compile-check)
+           (setf result (compile-check target-path parameters))
+           (setf result '(:status "skipped" :details "Compilation check disabled for this file type"))))
+      ("custom-function"
+       (if (null validation-function)
+           (error "validation-function is required for custom-function type"))
+       (setf result (run-custom-validation validation-function target-path parameters)))
+      (t
+       (error "Invalid validation-type: ~A. Must be one of: syntax-check, test-run, lint-check, compile-check, custom-function." validation-type)))
+    
+    (format nil "Validation Result:~%Type: ~A~%Target: ~A~%File Type: ~A~%Status: ~A~%Details: ~A"
+            validation-type target-path file-type (getf result :status) (getf result :details))))
+
+(defun validate-syntax (path parameters)
+  "Validate syntax of Common Lisp file."
+  (let* ((cmd (format nil "cd ~A && sbcl --noinform --non-interactive --eval \"(compile-file \\\"~A\\\")\"" 
+                     (directory-namestring path) path))
+         (output (uiop:run-program cmd :ignore-error-status t :output :string :error-output :string)))
+    (if (search "Compilation failed" output)
+        `(:status "error" :details ,output)
+        `(:status "success" :details "Syntax check passed"))))
+
+(defun run-tests (path parameters)
+  "Run tests for specified file or directory."
+  (let* ((test-cmd (or (getf parameters :test-command)
+                       (format nil "cd ~A && sbcl --noinform --non-interactive --eval \"(asdf:test-system :~A)\"" 
+                               (directory-namestring path) (pathname-name path))))
+         (output (uiop:run-program test-cmd :ignore-error-status t :output :string :error-output :string)))
+    (if (or (search "FAIL" output) (> (uiop:run-program test-cmd :ignore-error-status t) 0))
+        `(:status "error" :details ,output)
+        `(:status "success" :details "All tests passed"))))
+
+(defun run-lint (path parameters)
+  "Run linter on specified file."
+  (let* ((linter (or (getf parameters :linter) "cl-lint"))
+         (cmd (format nil "~A ~A" linter path))
+         (output (uiop:run-program cmd :ignore-error-status t :output :string :error-output :string)))
+    (if (search "error" output)
+        `(:status "error" :details ,output)
+        `(:status "success" :details "Lint check passed"))))
+
+(defun compile-check (path parameters)
+  "Check if file compiles successfully."
+  (let* ((cmd (format nil "cd ~A && sbcl --noinform --non-interactive --eval \"(load \\\"~A\\\")\"" 
+                     (directory-namestring path) path))
+         (output (uiop:run-program cmd :ignore-error-status t :output :string :error-output :string)))
+    (if (search "error" output)
+        `(:status "error" :details ,output)
+        `(:status "success" :details "Compilation successful"))))
+
+(defun run-custom-validation (function-name target-path parameters)
+  "Run custom validation function."
+  (let ((result (funcall (find-symbol (string-upcase function-name) :keyword) target-path parameters)))
+    `(:status ,(if result "success" "error") :details ,(format nil "Custom validation: ~A" result))))
             out))))
