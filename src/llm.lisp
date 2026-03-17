@@ -27,6 +27,8 @@
          :accessor host)
    (model :initform "qwen3:8b"
           :accessor model)
+   (fallback-model :initform nil
+                   :accessor fallback-model)
    (api-key :initform nil
             :accessor api-key)
    (tools-enabled-p :initarg :tools-enabled-p
@@ -96,12 +98,17 @@
   (let* ((conversation (get-history this persona))
          (content (api-provider:create-request
                    (api-provider this)
-                   (model this)
+                   (resolve-model this persona)
                    conversation
                    (if (tools-enabled-p this)
                        (get-tools this persona)))))
 
     (request-post this content)))
+
+(defmethod resolve-model ((this llm) persona)
+  (if (persona:use-fallback-model-p persona)
+      (or (fallback-model this) (model this))
+      (model this)))
 
 (defmethod maybe-compress-history ((llm llm))
   "Compress oldest 10 history items (at end of stack) when total reaches 15."

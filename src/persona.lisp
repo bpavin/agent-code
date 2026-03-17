@@ -12,6 +12,7 @@
      #:get-user-prompt
      #:assistant
      #:tools
+     #:use-fallback-model-p
 
      #:base-persona
      #:summary-persona
@@ -33,6 +34,7 @@
     user
     assistant)
    (tools)
+   (use-fallback-model-p :std nil)
    (before-in-chain :std nil)
    (parallel-p :std nil)))
 
@@ -62,11 +64,13 @@
                  :system
                  "You are summarization assistant."
                  :parallel-p nil
+                 :use-fallback-model-p t
                  :user "Summarize all of the conversation. Output numbered list of main points."))
 
 (defparameter coordinator-persona
   (make-instance 'persona
                  :name "coordinator"
+                 :use-fallback-model-p t
                  :description "Primary orchestrator that delegates tasks to specialized subagents. Analyzes user requests, determines optimal delegation strategy, presents options with subagent information, incorporates user choices, and suggests next actions. Always check permission requirements before delegating file modifications."
                  :system "You are a specialized coordinator AI responsible for task delegation. Your role is to analyze requests, delegate to appropriate specialists, and present available next steps after subagent responses. All subagent outputs are directly visible to users without filtering or modification."
                  :user
@@ -248,6 +252,7 @@ Output:
 (defparameter explore-persona
   (make-instance 'persona
                  :name "explorer"
+                 :use-fallback-model-p t
                  :description "File system exploration specialist. Use when you need to: find specific files, examine file contents, explore project structure, search for patterns, or gather detailed file information. Uses systematic search strategies and provides comprehensive file analysis."
                  :parallel-p t
                  :before-in-chain "explorer"
