@@ -19,8 +19,6 @@
 (defparameter *ctx* nil)
 
 (defun main (project-path)
-  (log:config :debug)
-
   (if (null lparallel:*kernel*)
       (setf lparallel:*kernel* (lparallel:make-kernel 12)))
 
