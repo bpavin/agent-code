@@ -13,7 +13,7 @@
    #:ask
    #:initial-analysis
    #:ask-analysis
-   #:validate-implementation))
+   #:ask-implement))
 
 (in-package :agent-code/src/main)
 
@@ -55,15 +55,21 @@
                      (log:info "~A" e))))
       (llm:send-query *ctx* persona:analyzing-persona query nil)))
 
-(defun ask (query)
+(defun ask-implement (query)
+  (ask query :mode :implement))
+
+(defun ask (query &key (mode '(:coordinator :implement)))
   (setf query (append-file-content query))
 
-  (let* ((persona persona:coordinator-persona))
+  (if (eq mode :implement)
+      (llm:iterative-code-validation *ctx* query)
 
-    (handler-bind ((conditions:llm-condition
-                     (lambda (e)
-                       (conditions:print-log e))))
-      (llm:send-query *ctx* persona query nil))))
+      (let* ((persona persona:coordinator-persona))
+
+        (handler-bind ((conditions:llm-condition
+                         (lambda (e)
+                           (conditions:print-log e))))
+          (llm:send-query *ctx* persona query nil)))))
 
 (defun append-file-content (query)
   (if query
@@ -72,18 +78,5 @@
             (setf query
                   (format nil "~A~% ----- ~A -----~%~A~%~%"
                           query file-path (alexandria:read-file-into-string file-path))))))
+  query)
 
-
-(defun validate-implementation (file-path &key (validation-types '("syntax-check" "test-run" "lint-check" "compile-check")))
-  "Run validation on implemented file."
-  (let* ((ctx *ctx*)
-         (validator-tool (make-instance 'tool:validation-tool))
-         (results))
-    
-    (dolist (vtype validation-types)
-      (push (tool:tool-execute validator-tool ctx 
-                               `((:validation-type . ,vtype)
-                                 (:target-path . ,file-path)))
-            results))
-    
-    (format nil "Validation Results for ~A:~%~{~A~^~%~}" file-path (reverse results))))

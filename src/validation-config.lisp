@@ -1,5 +1,6 @@
-(defpackage :agent-code/validation-config
+(defpackage :agent-code/src/validation-config
   (:use :cl)
+  (:nicknames :validation-config)
   (:export #:*validation-rules*
            #:*test-commands*
            #:*linter-configs*
@@ -7,7 +8,7 @@
            #:file-type-from-extension
            #:test-files-exist-p))
 
-(in-package :agent-code/validation-config)
+(in-package :agent-code/src/validation-config)
 
 (defparameter *validation-rules*
   '((:common-lisp . ((:syntax-check . t)

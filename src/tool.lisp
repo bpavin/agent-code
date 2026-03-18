@@ -2,7 +2,7 @@
 	(:use :cl)
     (:nicknames :tool)
     (:import-from :cl-json)
-    (:import-from :agent-code/validation-config)
+    (:import-from :agent-code/src/validation-config)
 	(:export
      #:tool
 
@@ -23,7 +23,8 @@
      #:edit-file-tool
      #:patch-tool
      #:line-edit-tool
-     #:validation-tool))
+     #:validation-tool
+     #:validation-result-tool))
 
 (in-package :agent-code/src/tool)
 
@@ -391,18 +392,19 @@ Safety checks: max 1 operation, no overlapping line ranges."))
         (error err)
         (if (string-equal "" out)
             "Command was completed successfully."
+            out))))
 
 (defclass validation-tool (tool)
   ((name :initform "run_validation")
    (description :initform "Executes predefined validation functions on specified files or code sections. Returns validation results with success/error details.")
    (properties :initform '((:validation-type . ((:type . :string)
-                                               (:description . "Type of validation to perform. Must be one of: syntax-check, test-run, lint-check, compile-check, custom-function.")))
-                          (:target-path . ((:type . :string)
-                                          (:description . "Absolute path to file or directory to validate.")))
-                          (:validation-function . ((:type . :string)
-                                                  (:description . "Custom validation function name (only for validation-type: custom-function).")))
-                          (:parameters . ((:type . :object)
-                                         (:description . "Additional parameters for the validation function.")))))
+                                                (:description . "Type of validation to perform. Must be one of: syntax-check, test-run, lint-check, compile-check, custom-function.")))
+                           (:target-path . ((:type . :string)
+                                            (:description . "Absolute path to file or directory to validate.")))
+                           (:validation-function . ((:type . :string)
+                                                    (:description . "Custom validation function name (only for validation-type: custom-function).")))
+                           (:parameters . ((:type . :object)
+                                           (:description . "Additional parameters for the validation function.")))))
    (required :initform '(:validation-type :target-path)))
   (:documentation "Tool for running validation checks on code or files."))
 
@@ -414,18 +416,18 @@ Safety checks: max 1 operation, no overlapping line ranges."))
          (target-path (aget args :target-path))
          (validation-function (aget args :validation-function))
          (parameters (aget args :parameters))
-         (file-type (agent-code/validation-config:file-type-from-extension target-path))
+         (file-type (validation-config:file-type-from-extension target-path))
          (result))
     
     (alexandria:switch (validation-type :test #'string-equal)
       ("syntax-check"
-       (if (agent-code/validation-config:get-validation-rule file-type :syntax-check)
+       (if (validation-config:get-validation-rule file-type :syntax-check)
            (setf result (validate-syntax target-path parameters))
            (setf result '(:status "skipped" :details "Syntax check disabled for this file type"))))
       ("test-run"
-       (let ((test-rule (agent-code/validation-config:get-validation-rule file-type :test-run)))
+       (let ((test-rule (validation-config:get-validation-rule file-type :test-run)))
          (cond ((eq test-rule :if-tests-exist)
-                (if (agent-code/validation-config:test-files-exist-p target-path)
+                (if (validation-config:test-files-exist-p target-path)
                     (setf result (run-tests target-path parameters))
                     (setf result '(:status "skipped" :details "No test files found"))))
                (test-rule
@@ -433,7 +435,7 @@ Safety checks: max 1 operation, no overlapping line ranges."))
                (t
                 (setf result '(:status "skipped" :details "Test run disabled for this file type"))))))
       ("lint-check"
-       (let ((lint-rule (agent-code/validation-config:get-validation-rule file-type :lint-check)))
+       (let ((lint-rule (validation-config:get-validation-rule file-type :lint-check)))
          (cond ((eq lint-rule :warning-only)
                 (setf result (run-lint target-path (list* :warnings-only t parameters))))
                (lint-rule
@@ -441,7 +443,7 @@ Safety checks: max 1 operation, no overlapping line ranges."))
                (t
                 (setf result '(:status "skipped" :details "Lint check disabled for this file type"))))))
       ("compile-check"
-       (if (agent-code/validation-config:get-validation-rule file-type :compile-check)
+       (if (validation-config:get-validation-rule file-type :compile-check)
            (setf result (compile-check target-path parameters))
            (setf result '(:status "skipped" :details "Compilation check disabled for this file type"))))
       ("custom-function"
@@ -494,5 +496,6 @@ Safety checks: max 1 operation, no overlapping line ranges."))
 (defun run-custom-validation (function-name target-path parameters)
   "Run custom validation function."
   (let ((result (funcall (find-symbol (string-upcase function-name) :keyword) target-path parameters)))
-    `(:status ,(if result "success" "error") :details ,(format nil "Custom validation: ~A" result))))
-            out))))
+    `(:status ,(if result "success" "error")
+      :details ,(format nil "Custom validation: ~A" result))))
+

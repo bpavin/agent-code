@@ -14,7 +14,7 @@
    #:tool-response
    #:name
    #:args
-   ))
+   #:result))
 
 (in-package :agent-code/src/conditions)
 
@@ -48,7 +48,8 @@
 
 (define-condition tool-response (llm-condition)
   ((name :initarg :name :reader name :initform nil)
-   (args :initarg :args :reader args :initform nil)))
+   (args :initarg :args :reader args :initform nil)
+   (result :initarg :result :reader result :initform nil)))
 
 (defmethod print-log ((this tool-response))
   (if (log:debug)

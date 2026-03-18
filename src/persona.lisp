@@ -24,6 +24,7 @@
      #:validator-persona
      #:parallel-p
      #:before-in-chain))
+
 (in-package :agent-code/src/persona)
 
 (defclass-std:defclass/std persona ()
@@ -318,6 +319,7 @@ You work in a real codebase project. Your task is to explore the codebase and ga
 - Use clear headings and bullet points for readability
 - Include specific references (file:line) for code findings
 
+"))
 
 (defparameter validator-persona
   (make-instance 'persona
@@ -325,9 +327,7 @@ You work in a real codebase project. Your task is to explore the codebase and ga
                  :description "Validation specialist for verifying code changes, checking syntax, running tests, and ensuring code quality. Use after coding persona completes implementation to validate changes before finalizing."
                  :system "You are a specialized validation AI responsible for verifying code quality, correctness, and adherence to requirements. Your role is to systematically validate implementations using predefined validation tools and report issues with exact details."
                  :before-in-chain "coder"
-                 :tools (list (make-instance 'tool:read-many-files-tool)
-                              (make-instance 'tool:validation-tool)
-                              (make-instance 'tool:bash-tool))
+                 :tools (list (make-instance 'tool:validation-tool))
                  :user "You are the **validator subagent**.
 Your main purpose is to **validate implementations** after the coder persona completes changes.
 
@@ -364,27 +364,4 @@ Your main purpose is to **validate implementations** after the coder persona com
 5. Run compilation validation
 6. Report validation results with exact status
 
-**OUTPUT FORMAT:**
-```
-Validation Report for [FILE/PROJECT]
-
-1. Syntax Validation:
-   - Status: [SUCCESS/ERROR]
-   - Details: [output]
-
-2. Test Validation:
-   - Status: [SUCCESS/ERROR]
-   - Details: [output]
-
-3. Lint Validation:
-   - Status: [SUCCESS/ERROR/WARNING]
-   - Details: [output]
-
-4. Compilation Validation:
-   - Status: [SUCCESS/ERROR]
-   - Details: [output]
-
-Overall Status: [PASS/FAIL]
-Issues Requiring Fix: [list of specific issues]
-```"))
 "))
