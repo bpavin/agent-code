@@ -18,7 +18,9 @@
      #:memory
      #:last-in-history
      #:clear-history
-     #:mode))
+     #:mode
+     #:iterative-code-validation))
+
 
 (in-package :agent-code/src/llm)
 
@@ -440,4 +442,20 @@ Use this index to specify which memory item you want to update. Index is mandato
                                :tools (persona:tools persona))))
        (setf (api-provider:temperature (api-provider sub))
              (nth i temps))
-      (push sub subagents)))))
+(defun iterative-code-validation (llm prompt &key (max-iterations 5))
+  "Orchestrates coding-validation loop with failure recovery."
+  (block validation-loop
+    (do ((i 1 (1+ i))
+         (current-prompt prompt))
+        ((> i max-iterations)
+         (error "Validation failed after ~D iterations" max-iterations))
+      (let ((coder-response (llm:send-query llm current-prompt :persona 'coder-persona))
+            (validation-response (llm:send-query llm 
+                                          (format nil "Validate this implementation: ~A" coder-response)
+                                          :persona 'validator-persona)))
+        (when (eq (getf validation-response :status) :success)
+          (return-from validation-loop (values coder-response validation-response)))
+        (setf current-prompt
+              (format nil "Validation failed (~A): ~A. Fix errors and retry."
+                      i
+                      (getf validation-response :error-details)))))))
