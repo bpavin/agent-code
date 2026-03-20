@@ -6,6 +6,7 @@
            #:*linter-configs*
            #:get-validation-rule
            #:file-type-from-extension
+           #:project-type-from-directory
            #:test-files-exist-p))
 
 (in-package :agent-code/src/validation-config)
@@ -14,7 +15,11 @@
   '((:common-lisp . ((:syntax-check . t)
                      (:compile-check . t)
                      (:lint-check . :warning-only)
-                     (:test-run . :if-tests-exist)))
+                     (:test-run . t)))
+    (:java . ((:syntax-check . t)
+              (:compile-check . t)
+              (:lint-check . :warning-only)
+              (:test-run . t)))
     (:python . ((:syntax-check . t)
                 (:lint-check . t)
                 (:test-run . :if-tests-exist)))
@@ -24,6 +29,7 @@
 
 (defparameter *test-commands*
   '((:common-lisp . "sbcl --noinform --non-interactive --eval \"(asdf:test-system :~A)\"")
+    (:java . "mvn clean verify")
     (:python . "python -m pytest ~A")
     (:javascript . "npm test")))
 
@@ -38,21 +44,26 @@
         (cdr (assoc rule rules))
         (cdr (assoc rule (cdr (assoc :default *validation-rules*)))))))
 
-(defun file-type-from-extension (path)
-  (let ((ext (pathname-type path)))
-    (cond ((or (string-equal ext "lisp") (string-equal ext "lsp") (string-equal ext "cl"))
-           :common-lisp)
-          ((or (string-equal ext "py"))
-           :python)
-          ((or (string-equal ext "js") (string-equal ext "ts"))
-           :javascript)
-          (t :default))))
+(defun project-type-from-directory (path)
+  (let ((files (uiop:directory-files path)))
+    (dolist (file files)
+      (let* ((ext (pathname-type file))
+             (name (if ext
+                       (format nil "~A.~A" (pathname-name file) ext)
+                       (pathname-name file))))
+        (cond ((string-equal ext "asd")
+               (return :common-lisp))
+              ((string-equal name "pom.xml")
+               (return :java))
+              ((or (string-equal ext "py"))
+               :python)
+              ((or (string-equal ext "js") (string-equal ext "ts"))
+               :javascript)
+              (t :default))))))
 
 (defun test-files-exist-p (path)
   "Check if test files exist for the given path."
   (let* ((dir (directory-namestring path))
-         (name (pathname-name path))
-         (test-patterns (list (format nil "~A/test-~A.*" dir name)
-                              (format nil "~A/~A-test.*" dir name)
-                              (format nil "~A/tests/*" dir))))
-    (some #'probe-file test-patterns)))
+         (test-patterns (list (format nil "~Atests/" dir)
+                              (format nil "~Asrc/test/" dir))))
+    (some #'uiop:directory-exists-p test-patterns)))

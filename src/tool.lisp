@@ -379,7 +379,8 @@ Safety checks: max 1 operation, no overlapping line ranges."))
 
     (if (not (serapeum:string-suffix-p "/" path))
         (setf path (format nil "~A/" path)))
-    (let ((files (uiop:directory-files path)))
+    (let ((files (append (uiop:directory-files path)
+                         (uiop:subdirectories path))))
       (format nil "~A" files))))
 
 (defun call-system-shell (cmd)
@@ -400,7 +401,7 @@ Safety checks: max 1 operation, no overlapping line ranges."))
    (properties :initform '((:validation-type . ((:type . :string)
                                                 (:description . "Type of validation to perform. Must be one of: syntax-check, test-run, lint-check, compile-check, custom-function.")))
                            (:target-path . ((:type . :string)
-                                            (:description . "Absolute path to file or directory to validate.")))
+                                            (:description . "Absolute path to directory of the project to validate.")))
                            (:validation-function . ((:type . :string)
                                                     (:description . "Custom validation function name (only for validation-type: custom-function).")))
                            (:parameters . ((:type . :object)
@@ -416,16 +417,16 @@ Safety checks: max 1 operation, no overlapping line ranges."))
          (target-path (aget args :target-path))
          (validation-function (aget args :validation-function))
          (parameters (aget args :parameters))
-         (file-type (validation-config:file-type-from-extension target-path))
+         (project-type (validation-config:project-type-from-directory target-path))
          (result))
-    
+
     (alexandria:switch (validation-type :test #'string-equal)
       ("syntax-check"
-       (if (validation-config:get-validation-rule file-type :syntax-check)
+       (if (validation-config:get-validation-rule project-type :syntax-check)
            (setf result (validate-syntax target-path parameters))
            (setf result '(:status "skipped" :details "Syntax check disabled for this file type"))))
       ("test-run"
-       (let ((test-rule (validation-config:get-validation-rule file-type :test-run)))
+       (let ((test-rule (validation-config:get-validation-rule project-type :test-run)))
          (cond ((eq test-rule :if-tests-exist)
                 (if (validation-config:test-files-exist-p target-path)
                     (setf result (run-tests target-path parameters))
@@ -435,7 +436,7 @@ Safety checks: max 1 operation, no overlapping line ranges."))
                (t
                 (setf result '(:status "skipped" :details "Test run disabled for this file type"))))))
       ("lint-check"
-       (let ((lint-rule (validation-config:get-validation-rule file-type :lint-check)))
+       (let ((lint-rule (validation-config:get-validation-rule project-type :lint-check)))
          (cond ((eq lint-rule :warning-only)
                 (setf result (run-lint target-path (list* :warnings-only t parameters))))
                (lint-rule
@@ -443,7 +444,7 @@ Safety checks: max 1 operation, no overlapping line ranges."))
                (t
                 (setf result '(:status "skipped" :details "Lint check disabled for this file type"))))))
       ("compile-check"
-       (if (validation-config:get-validation-rule file-type :compile-check)
+       (if (validation-config:get-validation-rule project-type :compile-check)
            (setf result (compile-check target-path parameters))
            (setf result '(:status "skipped" :details "Compilation check disabled for this file type"))))
       ("custom-function"
@@ -452,9 +453,11 @@ Safety checks: max 1 operation, no overlapping line ranges."))
        (setf result (run-custom-validation validation-function target-path parameters)))
       (t
        (error "Invalid validation-type: ~A. Must be one of: syntax-check, test-run, lint-check, compile-check, custom-function." validation-type)))
-    
-    (format nil "Validation Result:~%Type: ~A~%Target: ~A~%File Type: ~A~%Status: ~A~%Details: ~A"
-            validation-type target-path file-type (getf result :status) (getf result :details))))
+
+    (list :validation-type validation-type :target-path target-path
+          :project-type project-type
+          :status (getf result :status)
+          :details (getf result :details))))
 
 (defun validate-syntax (path parameters)
   "Validate syntax of Common Lisp file."
