@@ -18,7 +18,9 @@
      #:memory
      #:last-in-history
      #:clear-history
-     #:mode))
+     #:mode
+     #:iterative-code-validation))
+
 
 (in-package :agent-code/src/llm)
 
@@ -294,7 +296,8 @@ These are tool descriptions:~%~%~A"
                (let ((tool-result (tool:tool-execute tool this args)))
 
                  (signal 'conditions:tool-response
-                         :text "Tool executed successfully" :name tool-name :args args)
+                         :text "Tool executed successfully"
+                         :name tool-name :args args :result tool-result)
 
                  (return-from handle-function-call tool-result))))))
 
@@ -440,4 +443,34 @@ Use this index to specify which memory item you want to update. Index is mandato
                                :tools (persona:tools persona))))
        (setf (api-provider:temperature (api-provider sub))
              (nth i temps))
-      (push sub subagents)))))
+-      (push sub subagents)))))
+
+(defun iterative-code-validation (llm prompt &key (max-iterations 5))
+  "Orchestrates coding-validation loop with failure recovery."
+  (block validation-loop
+    (do ((i 1 (1+ i))
+         (current-prompt prompt))
+        ((> i max-iterations)
+         (error "Validation failed after ~D iterations" max-iterations))
+
+      (let* ((coder-response (llm:send-query llm persona:coding-persona current-prompt nil))
+             (validation-response (call-validator llm coder-response)))
+
+        (when (eq (getf validation-response :status) :success)
+          (return-from validation-loop (values coder-response validation-response)))
+
+        (setf current-prompt
+              (format nil "Validation failed (~A): ~A. Fix errors and retry."
+                      i
+                      (getf validation-response :error-details)))))))
+
+(defun call-validator (llm coder-response)
+  (handler-bind ((conditions:tool-response
+                   (lambda (e)
+                     (log:info "Validation executed: ~A" e)
+                     (return-from call-validator (conditions:result e)))))
+
+    (llm:send-query llm
+                    persona:validator-persona
+                    (format nil "Validate this implementation: ~A" coder-response)
+                    nil)))

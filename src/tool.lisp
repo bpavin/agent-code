@@ -2,6 +2,7 @@
 	(:use :cl)
     (:nicknames :tool)
     (:import-from :cl-json)
+    (:import-from :agent-code/src/validation-config)
 	(:export
      #:tool
 
@@ -21,7 +22,9 @@
      #:dir-tool
      #:edit-file-tool
      #:patch-tool
-     #:line-edit-tool))
+     #:line-edit-tool
+     #:validation-tool
+     #:validation-result-tool))
 
 (in-package :agent-code/src/tool)
 
@@ -376,7 +379,8 @@ Safety checks: max 1 operation, no overlapping line ranges."))
 
     (if (not (serapeum:string-suffix-p "/" path))
         (setf path (format nil "~A/" path)))
-    (let ((files (uiop:directory-files path)))
+    (let ((files (append (uiop:directory-files path)
+                         (uiop:subdirectories path))))
       (format nil "~A" files))))
 
 (defun call-system-shell (cmd)
@@ -390,3 +394,47 @@ Safety checks: max 1 operation, no overlapping line ranges."))
         (if (string-equal "" out)
             "Command was completed successfully."
             out))))
+
+(defclass validation-tool (tool)
+  ((name :initform "run_validation")
+   (description :initform "Executes predefined validation functions on specified files or code sections. Returns validation results with success/error details.")
+   (properties :initform '((:target-path . ((:type . :string)
+                                            (:description . "Absolute path to directory of the project to validate.")))))
+   (required :initform '(:target-path)))
+  (:documentation "Tool for running validation checks on code or files."))
+
+(defmethod tool-execute ((tool validation-tool) llm args)
+  (if (null args)
+      (error "No arguments specified for validation."))
+
+  (let* ((target-path (aget args :target-path))
+         (result))
+
+    (let ((test-cmd (validation-config:get-test-command-from-path target-path)))
+      (cond ((eq test-cmd :if-tests-exist)
+             (if (validation-config:test-files-exist-p target-path)
+                 (setf result (run-tests test-cmd))
+                 (setf result '(:status "skipped" :details "No test files found"))))
+            (test-cmd
+             (setf result (run-tests test-cmd)))
+            (t
+             (setf result '(:status "skipped" :details "Test run disabled for this file type")))))
+
+    (list :target-path target-path
+          :status (getf result :status)
+          :details (getf result :details))))
+
+(defun run-tests (test-cmd)
+  "Run tests for specified file or directory."
+  (multiple-value-bind (output err code)
+      (uiop:run-program test-cmd :ignore-error-status t :output :string :error-output :string)
+    (if (or (search "FAIL" output) (> code 0))
+        `(:status "error" :details (format nil "~A~%~A" ,output ,err))
+        `(:status "success" :details "All tests passed"))))
+
+(defun run-custom-validation (function-name target-path parameters)
+  "Run custom validation function."
+  (let ((result (funcall (find-symbol (string-upcase function-name) :keyword) target-path parameters)))
+    `(:status ,(if result "success" "error")
+      :details ,(format nil "Custom validation: ~A" result))))
+
