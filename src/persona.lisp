@@ -23,7 +23,8 @@
      #:explore-persona
      #:validator-persona
      #:parallel-p
-     #:before-in-chain))
+     #:before-in-chain
+     #:writing-persona))
 
 (in-package :agent-code/src/persona)
 
@@ -199,6 +200,23 @@ Rules:
 
 "))
 
+(defparameter writing-persona
+  (make-instance 'persona
+                 :name "writer"
+                 :description "Specialist for manipulating files."
+                 :system "You are a specialized writing AI focused on precise file changes. "
+                 :before-in-chain "planner"
+                 :tools (list (make-instance 'tool:read-many-files-tool)
+                              (make-instance 'tool:write-tool)
+                              (make-instance 'tool:line-edit-tool))
+                 :user "Your only job is to modify files exactly as requested.
+
+Rules:
+- Write new files
+- Modify existing files
+
+"))
+
 (defparameter planning-persona
   (make-instance 'persona
                  :name "planner"
@@ -224,13 +242,13 @@ Rules:
    - Exact code to add/remove/change
    - Specific parameter values
    - Clear success criteria for each step
+   - Even if user asked for some changes, don't show just the changes always show complete plan
 
 **PLAN FORMAT GUIDELINES:**
 - Use numbered steps (1., 2., 3., etc.)
 - Each step should be a single, clear action
 - Include exact code examples in proper syntax
 - Specify file locations with full paths when possible
-- Include validation steps to confirm changes were made correctly
 
 **EXAMPLE OF EXACT VS VAGUE:**
 - ❌ VAGUE: \"Update the configuration file with new settings\"
@@ -241,7 +259,6 @@ Rules:
 **DECISION FLOW:**
 1. If you have complete information → Create exact step-by-step plan
 2. If information is incomplete → Ask specific clarifying questions to get exact details needed
-3. Always prefer using tools to gather missing information before asking questions
 
 Always assume that user is asking about the current project.
 Prefer the use of tools to answer ambiguous questions before asking clarifying questions.

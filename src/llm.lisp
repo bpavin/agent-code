@@ -351,7 +351,7 @@ Use this index to specify which memory item you want to update. Index is mandato
    (personas :initform (list ;persona:analyzing-persona
                              persona:explore-persona
                              persona:planning-persona
-                             persona:coding-persona)
+                             persona:writing-persona)
              :accessor personas)
    (tool:properties)
    (tool:required :initform '(:name :prompt))))
