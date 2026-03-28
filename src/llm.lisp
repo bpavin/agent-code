@@ -9,6 +9,7 @@
     (:import-from :agent-code/src/api-provider)
     (:import-from :agent-code/src/persona)
     (:import-from :agent-code/src/tool)
+    (:import-from :agent-code/src/mcp)
     (:import-from :agent-code/src/llm-response)
 	(:export
      #:llm
@@ -21,7 +22,6 @@
      #:clear-history
      #:mode
      #:iterative-code-validation))
-
 
 (in-package :agent-code/src/llm)
 
@@ -59,6 +59,9 @@
            :accessor memory)
    (memory-tool :initform (make-instance 'memory-tool)
                 :accessor memory-tool)
+   (mcps :initform nil
+         :initarg :mcps
+         :accessor mcps)
    (tools :initform (list (make-instance 'subagent-tool))
           :initarg :tools
           :accessor tools)
@@ -74,6 +77,9 @@
 
 (defmethod get-tools ((this llm) persona)
   (append (or (persona:tools persona) (tools this))
+          (mapcan (lambda (mcp)
+                    (mcp:tools mcp))
+                  (mcps this))
           (if (memory-enabled-p this)
               (list (memory-tool this)))))
 
@@ -450,7 +456,7 @@ Use this index to specify which memory item you want to update. Index is mandato
                                :tools (persona:tools persona))))
        (setf (api-provider:temperature (api-provider sub))
              (nth i temps))
--      (push sub subagents)))))
+       (push sub subagents)))))
 
 (defun iterative-code-validation (llm prompt &key (max-iterations 5))
   "Orchestrates coding-validation loop with failure recovery."

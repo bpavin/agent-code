@@ -7,6 +7,7 @@
   (:import-from :agent-code/src/llm)
   (:import-from :agent-code/src/api-provider)
   (:import-from :agent-code/src/tool)
+  (:import-from :agent-code/src/mcp)
   (:import-from :agent-code/src/llm-response)
   (:export
    #:main
@@ -34,6 +35,9 @@
                                           (format nil "~A/agent-code.md" project-path)))
                     ;; :api-provider (make-instance 'api-provider:chat-completion-api-provider)
                     :api-provider (make-instance 'api-provider:responses-api-provider)
+                    :mcps (list (make-instance 'mcp:mcp
+                                               :name "deepwiki"
+                                               :url "https://mcp.deepwiki.com/mcp"))
                     :tools-enabled-p t
                     :deep-thinking-p t)))
         (setf *ctx* this))))
@@ -64,12 +68,17 @@
   (handler-bind ((conditions:llm-condition
                    (lambda (e)
                      (conditions:print-log e))))
-    (if (eq mode :implement)
-        (llm:iterative-code-validation *ctx* query)
+    (case mode
+      (:base
+       (let* ((persona persona:base-persona))
+         (llm:send-query *ctx* persona query nil)))
 
-        (let* ((persona persona:coordinator-persona))
+      (:implement
+       (llm:iterative-code-validation *ctx* query))
 
-          (llm:send-query *ctx* persona query nil)))))
+      (:coordinator
+       (let* ((persona persona:coordinator-persona))
+         (llm:send-query *ctx* persona query nil))))))
 
 (defun append-file-content (query)
   (if query

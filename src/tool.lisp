@@ -28,7 +28,7 @@
 
 (in-package :agent-code/src/tool)
 
-(defclass tool ()
+(defclass-std:defclass/std tool ()
     ((name :type string :accessor name)
      (description :type string :accessor description)
      (properties :type list :accessor properties)
