@@ -77,6 +77,11 @@
 
 (defmethod get-tools ((this llm) persona)
   (append (or (persona:tools persona) (tools this))
+          (if (memory-enabled-p this)
+              (list (memory-tool this)))))
+
+(defmethod get-all-tools ((this llm) persona)
+  (append (or (persona:tools persona) (tools this))
           (mapcan (lambda (mcp)
                     (mcp:tools mcp))
                   (mcps this))
@@ -112,7 +117,7 @@
                    model
                    conversation
                    (if (tools-enabled-p this)
-                       (get-tools this persona)))))
+                       (get-all-tools this persona)))))
 
     (request-post this model content)))
 
@@ -313,6 +318,24 @@ These are tool descriptions:~%~%~A"
                          :name tool-name :args args :result tool-result)
 
                  (return-from handle-function-call tool-result))))))
+
+    (if (null tool-called-p)
+        (dolist (mcp (mcps this))
+          (dolist (mcp-tool (mcp:tools mcp))
+            (when (string-equal tool-name (tool:name mcp-tool))
+              (setf tool-called-p t)
+
+              (signal 'conditions:tool-call
+                      :text "Executing MCP tool" :name tool-name :args args)
+
+              (cond (T
+                     (let ((tool-result (mcp:tool-execute mcp mcp-tool args)))
+
+                       (signal 'conditions:tool-response
+                               :text "MCP tool executed successfully"
+                               :name tool-name :args args :result tool-result)
+
+                       (return-from handle-function-call tool-result))))))))
 
     (when (null tool-called-p)
       (error "Tool was not found: ~A" tool-name))))

@@ -35,9 +35,14 @@
                                           (format nil "~A/agent-code.md" project-path)))
                     ;; :api-provider (make-instance 'api-provider:chat-completion-api-provider)
                     :api-provider (make-instance 'api-provider:responses-api-provider)
-                    :mcps (list (make-instance 'mcp:mcp
-                                               :name "deepwiki"
-                                               :url "https://mcp.deepwiki.com/mcp"))
+                    :mcps (list
+                           ;; (make-instance 'mcp:mcp
+                           ;;                     :name "deepwiki"
+                           ;;                     :url "https://mcp.deepwiki.com/mcp")
+                                ;; (make-instance 'mcp:mcp
+                                ;;                :name "sequentialthinking"
+                                ;;                :url "https://remote.mcpservers.org/sequentialthinking/mcp")
+                                )
                     :tools-enabled-p t
                     :deep-thinking-p t)))
         (setf *ctx* this))))

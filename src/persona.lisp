@@ -55,6 +55,7 @@
   (make-instance 'persona
                  :name "base"
                  :description "General-purpose assistant for answering questions that don't require specialized analysis or file operations. Use for conceptual discussions, explanations, and simple queries without project context."
+                 :use-fallback-model-p t
                  :system
                  "You are helpfull assistant."
                  :parallel-p t))

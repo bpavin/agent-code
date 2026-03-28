@@ -6,7 +6,8 @@
 	(:export
      #:mcp
      #:tools
-     #:connect))
+     #:connect
+     #:tool-execute))
 
 (in-package :agent-code/src/mcp)
 
@@ -25,6 +26,7 @@
   (setf (tools this) (get-tools this)))
 
 (defmethod initialize ((this mcp))
+  (log:info "Initializing connection to mcp server: ~A" (url this))
   (multiple-value-bind (response headers)
       (call-mcp this "initialize"
                 `((:protocol-version . "2024-11-05")
@@ -49,15 +51,16 @@
                                   :required (alexandria:assoc-value schema-alist :required))))
         (push tool tools)))))
 
-(defmethod call-tool ((this mcp) args)
-  (let* ((raw-alist (call-mcp this "tools/call" args))
+(defmethod tool-execute ((this mcp) tool args)
+  (let* ((params `((:name . ,(tool:name tool))
+                   (:arguments . ,args)))
+         (raw-alist (call-mcp this "tools/call" params))
          (result-alist (alexandria:assoc-value raw-alist :result))
-         (contents-alist (alexandria:assoc-value result-alist :content))
-         (results))
+         (contents-alist (alexandria:assoc-value result-alist :content)))
 
-    (dolist (content-alist contents-alist results)
+    (dolist (content-alist contents-alist)
       (let* ((text (alexandria:assoc-value content-alist :text)))
-        (push text results)))))
+        (return text)))))
 
 (defmethod call-mcp ((this mcp) (method string) &optional params &rest options)
   "It is possible to pass HTTP headers for this one call by giving an alist as :headers keyword argument."
