@@ -2,6 +2,7 @@
 	(:use :cl)
     (:nicknames :llm)
     (:import-from :cl-ppcre)
+    (:import-from :cl-json)
     (:import-from :lparallel)
     (:import-from :defclass-std)
     (:import-from :agent-code/src/conditions)
@@ -82,13 +83,15 @@
   (if query
       (add-history this (llm-response:create-message :user query)))
 
-  (let* ((api-response (send-request this persona query)))
+  (let* ((api-response (send-request this persona query))
+         (api-response-alist (cl-json:decode-json-from-string api-response)))
 
     (signal 'conditions:llm-response
-            :text "LLM response" :json api-response)
+            :text "LLM response" :json api-response
+            :total-tokens (api-provider:get-total-tokens (api-provider this) api-response-alist))
 
     (handler-case
-        (let ((llm-responses (api-provider:handle-response (api-provider this) api-response)))
+        (let ((llm-responses (api-provider:handle-response (api-provider this) api-response-alist)))
           (act-on-llm-response this persona llm-responses))
       (error (e)
         (send-query this persona
@@ -97,28 +100,32 @@
 
 (defmethod send-request ((this llm) persona query)
   (let* ((conversation (get-history this persona))
+         (model (resolve-model this persona))
          (content (api-provider:create-request
                    (api-provider this)
-                   (resolve-model this persona)
+                   model
                    conversation
                    (if (tools-enabled-p this)
                        (get-tools this persona)))))
 
-    (request-post this content)))
+    (request-post this model content)))
 
 (defmethod resolve-model ((this llm) persona)
   (if (persona:use-fallback-model-p persona)
       (or (fallback-model this) (model this))
       (model this)))
 
-(defun request-post (this content)
+(defun request-post (this model content)
   (let (result
-        (url (format nil "~A~A" (host this) (api-provider:url (api-provider this)))))
+        (url (format nil "~A~A"
+                     (host this)
+                     (api-provider:url (api-provider this)))))
 
     (signal 'conditions:llm-request
-            :text "LLM request" :json content)
+            :text "LLM request" :model model :json content)
 
-    (do ((retry t))
+    (do ((retry t)
+         (retry-count 0))
         ((null retry)
          result)
       (handler-case
@@ -133,13 +140,13 @@
             (setf retry nil))
         (dex:http-request-too-many-requests (e)
           (log:warn "~A" e)
-          (sleep 5))
+          (if (> (incf retry-count) 10)
+              (error e))
+          (sleep 1))
         (dex:http-request-bad-request (e)
           (setf retry nil)
           (log:warn "request: ~A~%response: ~A" content e)
-          (error e))
-
-        ))))
+          (error e))))))
 
 (defmethod compress-history ((this llm))
   "Remove all history entries that are considered old."

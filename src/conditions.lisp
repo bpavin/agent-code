@@ -9,6 +9,8 @@
    #:llm-request
    #:llm-response
    #:json
+   #:total-tokens
+   #:model
 
    #:tool-call
    #:tool-response
@@ -27,16 +29,22 @@
   (log:info "~A" (text this)))
 
 (define-condition llm-request (llm-condition)
-  ((json :initarg :json :reader json :initform nil)))
+  ((json :initarg :json :reader json :initform nil)
+   (model :initarg :model :reader model :initform nil)))
 
 (defmethod print-log ((this llm-request))
-  (log:info "~A" (if (text this) (text this))))
+  (log:info "~A [model=~A]"
+            (if (text this) (text this))
+            (model this)))
 
 (define-condition llm-response (llm-condition)
-  ((json :initarg :json :reader json :initform nil)))
+  ((json :initarg :json :reader json :initform nil)
+   (total-tokens :initarg :total-tokens :reader total-tokens :initform nil)))
 
 (defmethod print-log ((this llm-response))
-  (log:info "~A" (if (text this) (text this))))
+  (log:info "[total-tokens=~A] ~A"
+            (total-tokens this)
+            (if (text this) (text this))))
 
 (define-condition tool-call (llm-condition)
   ((name :initarg :name :reader name :initform nil)

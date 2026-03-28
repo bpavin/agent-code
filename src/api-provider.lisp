@@ -10,6 +10,7 @@
         #:temperature
         #:create-request
         #:handle-response
+        #:get-total-tokens
 
         ;; impls
         #:chat-completion-api-provider
@@ -27,6 +28,8 @@
 (defgeneric handle-response (this api-response))
 
 (defgeneric create-response (this llm-response))
+
+(defgeneric get-total-tokens (this llm-response))
 
 (defclass-std:defclass/std chat-completion-api-provider (api-provider)
   ((url :std "/v1/chat/completions")))
@@ -69,8 +72,17 @@
    (mapcar #'cl-json:encode-json-alist-to-string lst)
    ","))
 
+(defmethod get-total-tokens ((this chat-completion-api-provider) api-response)
+  (let* ((api-alist (if (stringp api-response)
+                        (cl-json:decode-json-from-string api-response)
+                        api-response))
+         (usage-alist (alexandria:assoc-value api-alist :usage)))
+    (alexandria:assoc-value usage-alist :total--tokens)))
+
 (defmethod handle-response ((this chat-completion-api-provider) api-response)
-  (let* ((api-alist (cl-json:decode-json-from-string api-response))
+  (let* ((api-alist (if (stringp api-response)
+                        (cl-json:decode-json-from-string api-response)
+                        api-response))
          (llm-responses))
 
     (dolist (choice (alexandria:assoc-value api-alist :choices))
@@ -173,8 +185,17 @@
              (tool:to-alist tool))
            tools)))
 
+(defmethod get-total-tokens ((this responses-api-provider) api-response)
+  (let* ((api-alist (if (stringp api-response)
+                        (cl-json:decode-json-from-string api-response)
+                        api-response))
+         (usage-alist (alexandria:assoc-value api-alist :usage)))
+    (alexandria:assoc-value usage-alist :total--tokens)))
+
 (defmethod handle-response ((this responses-api-provider) api-response)
-  (let* ((api-alist (cl-json:decode-json-from-string api-response))
+  (let* ((api-alist (if (stringp api-response)
+                        (cl-json:decode-json-from-string api-response)
+                        api-response))
          (llm-responses))
 
     (dolist (output (alexandria:assoc-value api-alist :output))
