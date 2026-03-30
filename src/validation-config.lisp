@@ -51,7 +51,7 @@
         cmd)))
 
 (defun get-test-command-from-path (path)
-  (let ((files (uiop:directory-files path)))
+  (let ((files (uiop:directory-files (format nil "~A/" path))))
     (dolist (file files)
       (let* ((ext (pathname-type file))
              (name (if ext
@@ -59,12 +59,16 @@
                        (pathname-name file))))
         (cond ((string-equal ext "asd")
                (return (format nil (get-test-command :common-lisp) (pathname-name file))))
+
               ((string-equal name "pom.xml")
-               (return (get-test-command :java)))
+               (return (format nil "cd ~A && ~A" path (get-test-command :java))))
+
               ((or (string-equal ext "py"))
                (get-test-command :python))
+
               ((or (string-equal ext "js") (string-equal ext "ts"))
                (get-test-command :javascript))
+
               (t :default))))))
 
 (defun test-files-exist-p (path)

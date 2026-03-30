@@ -42,8 +42,10 @@
    (total-tokens :initarg :total-tokens :reader total-tokens :initform nil)))
 
 (defmethod print-log ((this llm-response))
-  (log:info "[total-tokens=~A] ~A"
-            (total-tokens this)
+  (log:info "~A~A"
+            (if (total-tokens this)
+                (format nil "[total-tokens=~A] " (total-tokens this))
+                "")
             (if (text this) (text this))))
 
 (define-condition tool-call (llm-condition)

@@ -414,11 +414,11 @@ Safety checks: max 1 operation, no overlapping line ranges."))
       (cond ((eq test-cmd :if-tests-exist)
              (if (validation-config:test-files-exist-p target-path)
                  (setf result (run-tests test-cmd))
-                 (setf result '(:status "skipped" :details "No test files found"))))
+                 (setf result '(:status :skipped :details "No test files found"))))
             (test-cmd
              (setf result (run-tests test-cmd)))
             (t
-             (setf result '(:status "skipped" :details "Test run disabled for this file type")))))
+             (setf result '(:status :skipped :details "Test run disabled for this file type")))))
 
     (list :target-path target-path
           :status (getf result :status)
@@ -428,13 +428,13 @@ Safety checks: max 1 operation, no overlapping line ranges."))
   "Run tests for specified file or directory."
   (multiple-value-bind (output err code)
       (uiop:run-program test-cmd :ignore-error-status t :output :string :error-output :string)
-    (if (or (search "FAIL" output) (> code 0))
-        `(:status "error" :details (format nil "~A~%~A" ,output ,err))
-        `(:status "success" :details "All tests passed"))))
+    (if (> code 0)
+        `(:status :error :details ,(format nil "~A~%~A" output err))
+        `(:status :success :details "All tests passed"))))
 
 (defun run-custom-validation (function-name target-path parameters)
   "Run custom validation function."
   (let ((result (funcall (find-symbol (string-upcase function-name) :keyword) target-path parameters)))
-    `(:status ,(if result "success" "error")
+    `(:status ,(if result :success :error)
       :details ,(format nil "Custom validation: ~A" result))))
 

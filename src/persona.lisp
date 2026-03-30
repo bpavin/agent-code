@@ -74,6 +74,7 @@
   (make-instance 'persona
                  :name "coordinator"
                  :use-weaker-model-p t
+                 :tools (list (make-instance 'llm:subagent-tool))
                  :description "Primary orchestrator that delegates tasks to specialized subagents. Analyzes user requests, determines optimal delegation strategy, presents options with subagent information, incorporates user choices, and suggests next actions. Always check permission requirements before delegating file modifications."
                  :system "You are a specialized coordinator AI responsible for task delegation. Your role is to analyze requests, delegate to appropriate specialists, and present available next steps after subagent responses. All subagent outputs are directly visible to users without filtering or modification."
                  :user
@@ -213,6 +214,7 @@ Rules:
                               (make-instance 'tool:write-tool)
                               (make-instance 'tool:line-edit-tool))
                  :user "Your only job is to modify files exactly as requested.
+Never write summarizations. Write content exactly as requested.
 
 Rules:
 - Write new files

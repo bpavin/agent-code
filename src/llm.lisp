@@ -21,7 +21,8 @@
      #:last-in-history
      #:clear-history
      #:mode
-     #:iterative-code-validation))
+     #:iterative-code-validation
+     #:subagent-tool))
 
 (in-package :agent-code/src/llm)
 
@@ -63,7 +64,7 @@
    (mcps :initform nil
          :initarg :mcps
          :accessor mcps)
-   (tools :initform (list (make-instance 'subagent-tool))
+   (tools :initform nil
           :initarg :tools
           :accessor tools)
    (tools-history :initform (make-hash-table :synchronized t)
@@ -441,10 +442,7 @@ Use this index to specify which memory item you want to update. Index is mandato
                  response)))
 
             (t
-             (let* ((subagent (make-instance 'llm:llm
-                                             :project-path (project-path llm)
-                                             :project-summary (project-summary llm)
-                                             :tools (persona:tools persona)))
+             (let* ((subagent (create-subagent llm persona))
                     (history (create-subagent-history llm persona))
                     (response (llm:send-query subagent persona
                                               prompt history)))
@@ -474,13 +472,16 @@ Use this index to specify which memory item you want to update. Index is mandato
   (let ((subagents)
         (temps '(0.4 0.6 1.0)))
    (dotimes (i count subagents)
-     (let ((sub (make-instance 'llm:llm
-                               :project-path (project-path llm)
-                               :project-summary (project-summary llm)
-                               :tools (persona:tools persona))))
+     (let ((sub (create-subagent llm persona)))
        (setf (api-provider:temperature (api-provider sub))
              (nth i temps))
        (push sub subagents)))))
+
+(defun create-subagent (llm persona)
+  (make-instance 'llm:llm
+                 :project-path (project-path llm)
+                 :project-summary (project-summary llm)
+                 :tools (persona:tools persona)))
 
 (defun iterative-code-validation (llm prompt &key (max-iterations 5))
   "Orchestrates coding-validation loop with failure recovery."
@@ -490,7 +491,8 @@ Use this index to specify which memory item you want to update. Index is mandato
         ((> i max-iterations)
          (error "Validation failed after ~D iterations" max-iterations))
 
-      (let* ((coder-response (llm:send-query llm persona:coding-persona current-prompt nil))
+      (let* ((coder persona:coding-persona)
+             (coder-response (llm:send-query (create-subagent llm coder) coder current-prompt nil))
              (validation-response (call-validator llm coder-response)))
 
         (when (eq (getf validation-response :status) :success)
@@ -504,10 +506,11 @@ Use this index to specify which memory item you want to update. Index is mandato
 (defun call-validator (llm coder-response)
   (handler-bind ((conditions:tool-response
                    (lambda (e)
-                     (log:info "Validation executed: ~A" e)
+                     (log:info "Validation executed with result: ~A" (conditions:result e))
                      (return-from call-validator (conditions:result e)))))
 
-    (llm:send-query llm
-                    persona:validator-persona
-                    (format nil "Validate this implementation: ~A" coder-response)
-                    nil)))
+    (let ((validator persona:validator-persona))
+      (llm:send-query (create-subagent llm validator)
+                     validator
+                     (format nil "Validate this implementation: ~A" coder-response)
+                     nil))))

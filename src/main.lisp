@@ -65,6 +65,8 @@
       (llm:send-query *ctx* persona:analyzing-persona query nil)))
 
 (defun ask-implement (query)
+  (when *ctx*
+    (init :project-path (llm:project-path *ctx*)))
   (ask query :mode :implement))
 
 (defun ask (query &key (mode :coordinator))
