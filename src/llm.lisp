@@ -30,8 +30,9 @@
          :accessor host)
    (model :initform "qwen3:8b"
           :accessor model)
-   (fallback-model :initform nil
-                   :accessor fallback-model)
+   (weaker-model :initform nil
+                 :accessor weaker-model
+                 :documentation "Weaker model that can be used for a little less important tasks.")
    (api-key :initform nil
             :accessor api-key)
    (tools-enabled-p :initarg :tools-enabled-p
@@ -122,8 +123,8 @@
     (request-post this model content)))
 
 (defmethod resolve-model ((this llm) persona)
-  (if (persona:use-fallback-model-p persona)
-      (or (fallback-model this) (model this))
+  (if (persona:use-weaker-model-p persona)
+      (or (weaker-model this) (model this))
       (model this)))
 
 (defun request-post (this model content)

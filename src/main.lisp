@@ -67,7 +67,7 @@
 (defun ask-implement (query)
   (ask query :mode :implement))
 
-(defun ask (query &key (mode '(:coordinator :implement)))
+(defun ask (query &key (mode :coordinator))
   (setf query (append-file-content query))
 
   (handler-bind ((conditions:llm-condition
@@ -76,6 +76,15 @@
     (case mode
       (:base
        (let* ((persona persona:base-persona))
+         (llm:send-query *ctx* persona query nil)))
+
+      (:write
+       (let* ((persona persona:writing-persona))
+         (break)
+         (llm:send-query *ctx* persona query nil)))
+
+      (:plan
+       (let* ((persona persona:planning-persona))
          (llm:send-query *ctx* persona query nil)))
 
       (:implement
