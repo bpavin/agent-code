@@ -17,12 +17,14 @@
      #:project-path
      #:project-summary
      #:history
-     #:memory
+     #:api-provider
+     #:last-subagent-response
      #:last-in-history
      #:clear-history
      #:mode
      #:iterative-code-validation
-     #:subagent-tool))
+     #:subagent-tool
+     ))
 
 (in-package :agent-code/src/llm)
 
@@ -53,14 +55,6 @@
                  :accessor api-provider)
    (history :initform nil
             :accessor history)
-   (memory-enabled-p :initform nil
-                     :initarg :memory-enabled-p
-                     :accessor memory-enabled-p)
-   (memory :initform nil
-           :initarg :memory
-           :accessor memory)
-   (memory-tool :initform (make-instance 'memory-tool)
-                :accessor memory-tool)
    (mcps :initform nil
          :initarg :mcps
          :accessor mcps)
@@ -77,22 +71,35 @@
    (last-subagent-response :initform (make-hash-table)
                            :accessor last-subagent-response)))
 
+(defparameter loop-detector-persona
+  (make-instance 'persona:persona
+                 :name "loop-detector"
+                 :description "Assistant that detects if the current AI conversation is stuck in a loop."
+                 :use-weaker-model-p t
+                 :tools (list (make-instance 'tool:loop-detection-tool))
+                 :system
+                 "Check the current conversation and determine if there is a duplication in the last 10 messages or tool calls.
+You must use loop_detection tool as notify the user."
+                 :parallel-p t))
+
 (defmethod get-tools ((this llm) persona)
-  (append (or (persona:tools persona) (tools this))
-          (if (memory-enabled-p this)
-              (list (memory-tool this)))))
+  (append (or (persona:tools persona) (tools this))))
 
 (defmethod get-all-tools ((this llm) persona)
   (append (or (persona:tools persona) (tools this))
           (mapcan (lambda (mcp)
                     (mcp:tools mcp))
-                  (mcps this))
-          (if (memory-enabled-p this)
-              (list (memory-tool this)))))
+                  (mcps this))))
 
 (defmethod send-query ((this llm) persona query history)
+
+  (if (and (history this)
+           (= 0 (mod (length (history this)) 10)))
+      (detect-loop-in-conversation this))
+
   (if history
       (setf (history this) history))
+
   (if query
       (add-history this (llm-response:create-message :user query)))
 
@@ -110,6 +117,17 @@
         (send-query this persona
                     (format nil "Response was invalid: ~A" e)
                     history)))))
+
+(defun detect-loop-in-conversation (llm)
+  (signal 'conditions:llm-condition :text "Running loop detection.")
+  (let* ((sub (create-subagent llm loop-detector-persona)))
+    (handler-bind ((tool:no-loop (lambda (e)
+                                   (declare (ignore e))
+                                   (return-from detect-loop-in-conversation))))
+     (send-query sub
+                 loop-detector-persona
+                 (persona:system loop-detector-persona)
+                 (copy-list (history llm))))))
 
 (defmethod send-request ((this llm) persona query)
   (let* ((conversation (get-history this persona))
@@ -198,24 +216,6 @@
                 :assistant (project-summary this)))
               conversations))
 
-    (if (memory-enabled-p this)
-        (push (api-provider:create-response
-               (api-provider this)
-               (llm-response:create-message
-                :assistant (format nil "CRITICAL:
-Use ~A tool to keep track of important details about conversation.
-Memory list will be always visibile to you.
-Keep memory list concise, up to date, and use it often.
-Use memory list as a longterm memory.
-Using this tool will remove past conversation and only the last 5 messages will be visible to you.
-
-==== MEMORY LIST ====
-~A
-"
-                                   +memory-tool-name+
-                                   (forge-memory-list (memory this)))))
-              conversations))
-
     (if (not (tools-enabled-p this))
         (push (api-provider:create-response
                (api-provider this)
@@ -236,19 +236,6 @@ These are tool descriptions:~%~%~A"
         (push `((:role . :system) (:content . ,(persona:system persona)))
               conversations))
     (to-json-array conversations)))
-
-(defun forge-memory-list (memory)
-  (if (null memory)
-      "Memory list is empty."
-      (let ((count 0))
-        (serapeum:string-join
-         (mapcan (lambda (i)
-                   (list (format nil "~A. --- note start ---
-~A
---- note end ---"
-                                 (incf count) i)))
-                 memory)
-         #\NewLine))))
 
 (defun to-json-array (lst)
   (serapeum:string-join
@@ -307,13 +294,8 @@ These are tool descriptions:~%~%~A"
         (signal 'conditions:tool-call
                 :text "Executing tool" :name tool-name :args args)
 
-        (cond ((string-equal tool-name +memory-tool-name+)
-               (let ((memory-result (update-memory tool this args)))
-                 (compress-history this)
-                 (return-from handle-function-call memory-result)))
-
-              (T
-               (let ((tool-result (tool:tool-execute tool this args)))
+        (cond (T
+               (let ((tool-result (tool:tool-execute tool args)))
 
                  (signal 'conditions:tool-response
                          :text "Tool executed successfully"
@@ -342,57 +324,15 @@ These are tool descriptions:~%~%~A"
     (when (null tool-called-p)
       (error "Tool was not found: ~A" tool-name))))
 
-(defparameter +memory-tool-name+ "update_memory")
-
-(defclass memory-tool (tool:tool)
-  ((tool:name :initform +memory-tool-name+)
-   (tool:description
-    :initform "Tool used for retaining key information. Use this often to store key information about previous conversation.
-Critical: Calling this tool will remove previous conversations, so make sure to include all information that is important for context.")
-   (tool:properties :initform '((:operation . ((:type . :string)
-                                          (:description . "Operation for updating memory. Must be one of: INSERT, UPDATE, REMOVE. You can insert new memory item or update/delete existing.")))
-                           (:index . ((:type . :integer)
-                                      (:description . "Memory is kept in a list. Each memory item is prefixed with index.
-Use this index to specify which memory item you want to update. Index is mandatory for update and delete.")))
-                           (:content . ((:type . :string)
-                                        (:description . "Information you want to update memory with. Content is mandatory for insert and update.")))))
-   (tool:required :initform '(:operation))))
-
-(defmethod update-memory ((tool memory-tool) llm args)
-  (if (null args)
-      (error "No arguments specified."))
-
-  (let* ((operation (tool:aget args :operation)))
-    (if (null operation)
-        (error "Operation is not specified."))
-
-    (alexandria:switch (operation :test #'string-equal)
-      ("insert"
-       (setf (llm:memory llm)
-             (append (llm:memory llm)
-                     (list (tool:aget args :content)))))
-      ("update"
-       (let ((i (- (parse-integer (tool:aget args :index)) 1)))
-         (setf (nth i (llm:memory llm))
-               (tool:aget args :content))))
-      ("remove"
-       (setf (llm:memory llm)
-             (delete (nth (tool:aget args :index) (llm:memory llm))
-                     (llm:memory llm))))
-      (t
-       (error "Invalid operation: ~A" operation)))
-    "Memory successfully updated."))
-
 (defclass subagent-tool (tool:tool)
   ((tool:name :initform "execute_subagent")
    (tool:description :initform "Run standalone subagent to complete specific task.")
-   (personas :initform (list ;persona:analyzing-persona
-                             persona:explore-persona
-                             persona:planning-persona
-                             persona:writing-persona)
+   (personas :initform nil
+             :initarg :personas
              :accessor personas)
    (tool:properties)
-   (tool:required :initform '(:name :prompt))))
+   (tool:required :initform '(:name :prompt))
+   (deep-thinking-p :initform nil)))
 
 (defmethod initialize-instance :after ((this subagent-tool) &rest args)
   (setf (tool:properties this)
@@ -408,7 +348,7 @@ Use this index to specify which memory item you want to update. Index is mandato
           (:prompt . ((:type . :string)
                       (:description . "Instructions for the subagent."))))))
 
-(defmethod tool:tool-execute ((tool subagent-tool) llm args)
+(defmethod tool:tool-execute ((tool subagent-tool) args)
   (if (null args)
       (error "No arguments specified."))
 
@@ -423,7 +363,7 @@ Use this index to specify which memory item you want to update. Index is mandato
              (find-if (lambda (p) (string-equal name (persona:name p)))
                       (personas tool))))
 
-      (cond ((and (deep-thinking-p llm) (persona:parallel-p persona))
+      (cond ((and (deep-thinking-p tool) (persona:parallel-p persona))
              (let* ((count 3)
                     (subs (create-subagents llm persona count))
                     (history (create-subagent-history llm persona)))
@@ -444,7 +384,7 @@ Use this index to specify which memory item you want to update. Index is mandato
             (t
              (let* ((subagent (create-subagent llm persona))
                     (history (create-subagent-history llm persona))
-                    (response (llm:send-query subagent persona
+                    (response (send-query subagent persona
                                               prompt history)))
 
                (put-last-subagent-response llm name response)
@@ -460,12 +400,12 @@ Use this index to specify which memory item you want to update. Index is mandato
   (if (or persona name)
       (multiple-value-bind (i existsp)
           (gethash (sxhash (if name name (persona:before-in-chain persona)))
-                   (last-subagent-response llm))
+                   (llm:last-subagent-response llm))
         (if existsp
             (list (llm-response:create-message :assistant i))))))
 
 (defun put-last-subagent-response (llm name response)
-  (setf (gethash (sxhash name) (last-subagent-response llm))
+  (setf (gethash (sxhash name) (llm:last-subagent-response llm))
         response))
 
 (defun create-subagents (llm persona count)
@@ -473,7 +413,7 @@ Use this index to specify which memory item you want to update. Index is mandato
         (temps '(0.4 0.6 1.0)))
    (dotimes (i count subagents)
      (let ((sub (create-subagent llm persona)))
-       (setf (api-provider:temperature (api-provider sub))
+       (setf (api-provider:temperature (llm:api-provider sub))
              (nth i temps))
        (push sub subagents)))))
 
@@ -482,35 +422,3 @@ Use this index to specify which memory item you want to update. Index is mandato
                  :project-path (project-path llm)
                  :project-summary (project-summary llm)
                  :tools (persona:tools persona)))
-
-(defun iterative-code-validation (llm prompt &key (max-iterations 5))
-  "Orchestrates coding-validation loop with failure recovery."
-  (block validation-loop
-    (do ((i 1 (1+ i))
-         (current-prompt prompt))
-        ((> i max-iterations)
-         (error "Validation failed after ~D iterations" max-iterations))
-
-      (let* ((coder persona:coding-persona)
-             (coder-response (llm:send-query (create-subagent llm coder) coder current-prompt nil))
-             (validation-response (call-validator llm coder-response)))
-
-        (when (eq (getf validation-response :status) :success)
-          (return-from validation-loop (values coder-response validation-response)))
-
-        (setf current-prompt
-              (format nil "Validation failed (~A): ~A. Fix errors and retry."
-                      i
-                      (getf validation-response :error-details)))))))
-
-(defun call-validator (llm coder-response)
-  (handler-bind ((conditions:tool-response
-                   (lambda (e)
-                     (log:info "Validation executed with result: ~A" (conditions:result e))
-                     (return-from call-validator (conditions:result e)))))
-
-    (let ((validator persona:validator-persona))
-      (llm:send-query (create-subagent llm validator)
-                     validator
-                     (format nil "Validate this implementation: ~A" coder-response)
-                     nil))))

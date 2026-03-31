@@ -8,6 +8,7 @@
   (:import-from :agent-code/src/api-provider)
   (:import-from :agent-code/src/tool)
   (:import-from :agent-code/src/mcp)
+  (:import-from :agent-code/src/personas)
   (:import-from :agent-code/src/llm-response)
   (:export
    #:main
@@ -51,7 +52,7 @@
   (let* ((list-of-files (uiop:run-program (format nil "cd ~A && git ls-files --others --cached --exclude-standard"
                                                   (llm:project-path *ctx*))
                                           :output :string))
-         (response (llm:send-query *ctx* persona:analyzing-persona
+         (response (llm:send-query *ctx* personas:analyzing-persona
                                    (format nil "Analyse the project ~A. These are the files in the project: ~A"
                                            (llm:project-path *ctx*)
                                            list-of-files)
@@ -62,7 +63,7 @@
   (handler-bind ((conditions:llm-condition
                    (lambda (e)
                      (log:info "~A" e))))
-      (llm:send-query *ctx* persona:analyzing-persona query nil)))
+      (llm:send-query *ctx* personas:analyzing-persona query nil)))
 
 (defun ask-implement (query)
   (when *ctx*
@@ -77,23 +78,23 @@
                      (conditions:print-log e))))
     (case mode
       (:base
-       (let* ((persona persona:base-persona))
+       (let* ((persona personas:base-persona))
          (llm:send-query *ctx* persona query nil)))
 
       (:write
-       (let* ((persona persona:writing-persona))
+       (let* ((persona personas:writing-persona))
          (break)
          (llm:send-query *ctx* persona query nil)))
 
       (:plan
-       (let* ((persona persona:planning-persona))
+       (let* ((persona personas:planning-persona))
          (llm:send-query *ctx* persona query nil)))
 
       (:implement
-       (llm:iterative-code-validation *ctx* query))
+       (iterative-code-validation *ctx* query))
 
       (:coordinator
-       (let* ((persona persona:coordinator-persona))
+       (let* ((persona personas:coordinator-persona))
          (llm:send-query *ctx* persona query nil))))))
 
 (defun append-file-content (query)
@@ -105,3 +106,34 @@
                           query file-path (alexandria:read-file-into-string file-path))))))
   query)
 
+(defun iterative-code-validation (llm prompt &key (max-iterations 5))
+  "Orchestrates coding-validation loop with failure recovery."
+  (block validation-loop
+    (do ((i 1 (1+ i))
+         (current-prompt prompt))
+        ((> i max-iterations)
+         (error "Validation failed after ~D iterations" max-iterations))
+
+      (let* ((coder personas:coding-persona)
+             (coder-response (llm:send-query (create-subagent llm coder) coder current-prompt nil))
+             (validation-response (call-validator llm coder-response)))
+
+        (when (eq (getf validation-response :status) :success)
+          (return-from validation-loop (values coder-response validation-response)))
+
+        (setf current-prompt
+              (format nil "Validation failed (~A): ~A. Fix errors and retry."
+                      i
+                      (getf validation-response :error-details)))))))
+
+(defun call-validator (llm coder-response)
+  (handler-bind ((conditions:tool-response
+                   (lambda (e)
+                     (log:info "Validation executed with result: ~A" (conditions:result e))
+                     (return-from call-validator (conditions:result e)))))
+
+    (let ((validator personas:validator-persona))
+      (llm:send-query (create-subagent llm validator)
+                     validator
+                     (format nil "Validate this implementation: ~A" coder-response)
+                     nil))))

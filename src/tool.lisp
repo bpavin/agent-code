@@ -3,6 +3,7 @@
     (:nicknames :tool)
     (:import-from :cl-json)
     (:import-from :agent-code/src/validation-config)
+    (:import-from :agent-code/src/conditions)
 	(:export
      #:tool
 
@@ -24,7 +25,9 @@
      #:patch-tool
      #:line-edit-tool
      #:validation-tool
-     #:validation-result-tool))
+     #:validation-result-tool
+     #:loop-detection-tool
+     #:no-loop))
 
 (in-package :agent-code/src/tool)
 
@@ -34,7 +37,7 @@
      (properties :type list :accessor properties)
      (required :type list :accessor required)))
 
-(defgeneric tool-execute (this llm args)
+(defgeneric tool-execute (this args)
   (:documentation "Abstract method for tool implementation."))
 
 (defgeneric to-alist (this)
@@ -59,7 +62,7 @@ Files are prepended with line numbers separated from file content with character
                                       (:description . "Array of the absolute paths of the files. Directories are not allowed. Wildcards are not allowed.")))))
    (required :initform '(:paths))))
 
-(defmethod tool-execute ((tool read-many-files-tool) llm args)
+(defmethod tool-execute ((tool read-many-files-tool) args)
   (if (null args)
       (error "No file specified for reading."))
   (let ((paths (aget args :paths)))
@@ -91,7 +94,7 @@ Files are prepended with line numbers separated from file content with character
                                         (:description . "Content of the file.")))))
    (required :initform '(:path :content))))
 
-(defmethod tool-execute ((tool write-tool) llm args)
+(defmethod tool-execute ((tool write-tool) args)
   (if (< (length args) 2)
       (error "Not enough arguments specified for writing."))
   (alexandria:write-string-into-file (aget args :content) (aget args :path))
@@ -108,7 +111,7 @@ Files are prepended with line numbers separated from file content with character
                                             (:description . "New content that will overwrite the old content.")))))
    (required :initform '(:path :old-content :new-content))))
 
-(defmethod tool-execute ((tool edit-file-tool) llm args)
+(defmethod tool-execute ((tool edit-file-tool) args)
   (if (< (length args) 3)
       (error "Not enough arguments specified for writing."))
 
@@ -132,7 +135,7 @@ Files are prepended with line numbers separated from file content with character
                                      (:description . "Absolute path of the file.")))))
    (required :initform '(:path))))
 
-(defmethod tool-execute ((tool delete-tool) llm args)
+(defmethod tool-execute ((tool delete-tool) args)
   (if (null args)
       (error "No file specified for deletion.")
       (delete-file (aget args :path))))
@@ -144,7 +147,7 @@ Files are prepended with line numbers separated from file content with character
                                         (:description . "Command and arguments of the bash command. Include cd of the directory you want to work with.")))))
    (required :initform '(:command))))
 
-(defmethod tool-execute ((tool bash-tool) llm args)
+(defmethod tool-execute ((tool bash-tool) args)
   (if (null args)
       (error "No command specified."))
   (let ((cmd (aget args :command)))
@@ -185,7 +188,7 @@ What the parts mean
 ")))))
    (required :initform '(:project-dir :diff))))
 
-(defmethod tool-execute ((tool patch-tool) llm args)
+(defmethod tool-execute ((tool patch-tool) args)
   (if (null args)
       (error "No command specified."))
   (let* ((diff (aget args :diff)))
@@ -254,7 +257,7 @@ Input: JSON array of operations with structure:
 Validates operations against file content.
 Safety checks: max 1 operation, no overlapping line ranges."))
 
-(defmethod tool-execute ((tool line-edit-tool) llm args)
+(defmethod tool-execute ((tool line-edit-tool) args)
   (let ((path (aget args :file-path))
         (op-list nil))
     (if (null path)
@@ -369,7 +372,7 @@ Safety checks: max 1 operation, no overlapping line ranges."))
                                      (:description . "Absolute path of a directory. Wildcards are not accepted.")))))
    (required :initform '(:path))))
 
-(defmethod tool-execute ((tool dir-tool) llm args)
+(defmethod tool-execute ((tool dir-tool) args)
   (if (null args)
       (error "No arguments specified."))
 
@@ -403,7 +406,7 @@ Safety checks: max 1 operation, no overlapping line ranges."))
    (required :initform '(:target-path)))
   (:documentation "Tool for running validation checks on code or files."))
 
-(defmethod tool-execute ((tool validation-tool) llm args)
+(defmethod tool-execute ((tool validation-tool) args)
   (if (null args)
       (error "No arguments specified for validation."))
 
@@ -438,3 +441,30 @@ Safety checks: max 1 operation, no overlapping line ranges."))
     `(:status ,(if result :success :error)
       :details ,(format nil "Custom validation: ~A" result))))
 
+(defclass loop-detection-tool (tool)
+  ((name :initform "loop_detection")
+   (description :initform "Result of loop detection. Call this to notify user wether loop is detected in the conversation.")
+   (properties :initform '((:certainty-percentage . ((:type . :number)
+                                                     (:description . "Level of certainty if loop is detected. Can be between 0 and 1.")))
+                           (:description . ((:type . :string)
+                                            (:description . "Details about detected loop.")))))
+   (required :initform '(:certainty-percentage)))
+  (:documentation "Tool for give feedback about loop detection."))
+
+(defmethod tool-execute ((tool loop-detection-tool) args)
+  (if (null args)
+      (error "No arguments specified for validation."))
+
+  (let* ((certainty (aget args :certainty-percentage)))
+    (if (not (<= 0 certainty 1))
+        (error "Certainty argument must be between 0 and 1"))
+
+    (if (>= certainty 0.8)
+        (error 'loop-detected :description (aget args :description))
+        (signal 'no-loop))))
+
+(define-condition loop-detected (conditions:llm-condition)
+  ((description :initarg :description :reader description :initform nil)))
+
+(define-condition no-loop (conditions:llm-condition)
+  ())
