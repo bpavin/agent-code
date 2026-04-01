@@ -37,7 +37,7 @@
      (properties :type list :accessor properties)
      (required :type list :accessor required)))
 
-(defgeneric tool-execute (this args)
+(defgeneric tool-execute (this args &rest options)
   (:documentation "Abstract method for tool implementation."))
 
 (defgeneric to-alist (this)
@@ -62,7 +62,7 @@ Files are prepended with line numbers separated from file content with character
                                       (:description . "Array of the absolute paths of the files. Directories are not allowed. Wildcards are not allowed.")))))
    (required :initform '(:paths))))
 
-(defmethod tool-execute ((tool read-many-files-tool) args)
+(defmethod tool-execute ((tool read-many-files-tool) args &rest options)
   (if (null args)
       (error "No file specified for reading."))
   (let ((paths (aget args :paths)))
@@ -94,7 +94,7 @@ Files are prepended with line numbers separated from file content with character
                                         (:description . "Content of the file.")))))
    (required :initform '(:path :content))))
 
-(defmethod tool-execute ((tool write-tool) args)
+(defmethod tool-execute ((tool write-tool) args &rest options)
   (if (< (length args) 2)
       (error "Not enough arguments specified for writing."))
   (alexandria:write-string-into-file (aget args :content) (aget args :path))
@@ -111,7 +111,7 @@ Files are prepended with line numbers separated from file content with character
                                             (:description . "New content that will overwrite the old content.")))))
    (required :initform '(:path :old-content :new-content))))
 
-(defmethod tool-execute ((tool edit-file-tool) args)
+(defmethod tool-execute ((tool edit-file-tool) args &rest options)
   (if (< (length args) 3)
       (error "Not enough arguments specified for writing."))
 
@@ -135,7 +135,7 @@ Files are prepended with line numbers separated from file content with character
                                      (:description . "Absolute path of the file.")))))
    (required :initform '(:path))))
 
-(defmethod tool-execute ((tool delete-tool) args)
+(defmethod tool-execute ((tool delete-tool) args &rest options)
   (if (null args)
       (error "No file specified for deletion.")
       (delete-file (aget args :path))))
@@ -147,7 +147,7 @@ Files are prepended with line numbers separated from file content with character
                                         (:description . "Command and arguments of the bash command. Include cd of the directory you want to work with.")))))
    (required :initform '(:command))))
 
-(defmethod tool-execute ((tool bash-tool) args)
+(defmethod tool-execute ((tool bash-tool) args &rest options)
   (if (null args)
       (error "No command specified."))
   (let ((cmd (aget args :command)))
@@ -188,7 +188,7 @@ What the parts mean
 ")))))
    (required :initform '(:project-dir :diff))))
 
-(defmethod tool-execute ((tool patch-tool) args)
+(defmethod tool-execute ((tool patch-tool) args &rest options)
   (if (null args)
       (error "No command specified."))
   (let* ((diff (aget args :diff)))
@@ -257,7 +257,7 @@ Input: JSON array of operations with structure:
 Validates operations against file content.
 Safety checks: max 1 operation, no overlapping line ranges."))
 
-(defmethod tool-execute ((tool line-edit-tool) args)
+(defmethod tool-execute ((tool line-edit-tool) args &rest options)
   (let ((path (aget args :file-path))
         (op-list nil))
     (if (null path)
@@ -372,7 +372,7 @@ Safety checks: max 1 operation, no overlapping line ranges."))
                                      (:description . "Absolute path of a directory. Wildcards are not accepted.")))))
    (required :initform '(:path))))
 
-(defmethod tool-execute ((tool dir-tool) args)
+(defmethod tool-execute ((tool dir-tool) args &rest options)
   (if (null args)
       (error "No arguments specified."))
 
@@ -406,7 +406,7 @@ Safety checks: max 1 operation, no overlapping line ranges."))
    (required :initform '(:target-path)))
   (:documentation "Tool for running validation checks on code or files."))
 
-(defmethod tool-execute ((tool validation-tool) args)
+(defmethod tool-execute ((tool validation-tool) args &rest options)
   (if (null args)
       (error "No arguments specified for validation."))
 
@@ -444,22 +444,23 @@ Safety checks: max 1 operation, no overlapping line ranges."))
 (defclass loop-detection-tool (tool)
   ((name :initform "loop_detection")
    (description :initform "Result of loop detection. Call this to notify user wether loop is detected in the conversation.")
-   (properties :initform '((:certainty-percentage . ((:type . :number)
-                                                     (:description . "Level of certainty if loop is detected. Can be between 0 and 1.")))
+   (properties :initform '((:certainty-percentage . ((:type . :integer)
+                                                     (:description . "Level of certainty weather the conversation
+is stuck in a loop and it's repeating. Can be between 0 and 100.")))
                            (:description . ((:type . :string)
                                             (:description . "Details about detected loop.")))))
    (required :initform '(:certainty-percentage)))
   (:documentation "Tool for give feedback about loop detection."))
 
-(defmethod tool-execute ((tool loop-detection-tool) args)
+(defmethod tool-execute ((tool loop-detection-tool) args &rest options)
   (if (null args)
       (error "No arguments specified for validation."))
 
-  (let* ((certainty (aget args :certainty-percentage)))
-    (if (not (<= 0 certainty 1))
-        (error "Certainty argument must be between 0 and 1"))
+  (let* ((certainty (parse-integer (aget args :certainty-percentage))))
+    (if (not (<= 0 certainty 100))
+        (error "Certainty argument must be between 0 and 100"))
 
-    (if (>= certainty 0.8)
+    (if (>= certainty 80)
         (error 'loop-detected :description (aget args :description))
         (signal 'no-loop))))
 

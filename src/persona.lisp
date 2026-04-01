@@ -40,4 +40,3 @@
                              (cl-json:encode-json-alist-to-string (tool:properties tool))))
                    tools)
            #\NewLine)))
-

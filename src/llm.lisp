@@ -124,10 +124,10 @@ You must use loop_detection tool as notify the user."
     (handler-bind ((tool:no-loop (lambda (e)
                                    (declare (ignore e))
                                    (return-from detect-loop-in-conversation))))
-     (send-query sub
-                 loop-detector-persona
-                 (persona:system loop-detector-persona)
-                 (copy-list (history llm))))))
+      (send-query sub
+                  loop-detector-persona
+                  (persona:system loop-detector-persona)
+                  (copy-list (history llm))))))
 
 (defmethod send-request ((this llm) persona query)
   (let* ((conversation (get-history this persona))
@@ -295,7 +295,7 @@ These are tool descriptions:~%~%~A"
                 :text "Executing tool" :name tool-name :args args)
 
         (cond (T
-               (let ((tool-result (tool:tool-execute tool args)))
+               (let ((tool-result (tool:tool-execute tool args :llm this)))
 
                  (signal 'conditions:tool-response
                          :text "Tool executed successfully"
@@ -332,7 +332,8 @@ These are tool descriptions:~%~%~A"
              :accessor personas)
    (tool:properties)
    (tool:required :initform '(:name :prompt))
-   (deep-thinking-p :initform nil)))
+   (deep-thinking-p :initform nil
+                    :accessor deep-thinking-p)))
 
 (defmethod initialize-instance :after ((this subagent-tool) &rest args)
   (setf (tool:properties this)
@@ -348,7 +349,7 @@ These are tool descriptions:~%~%~A"
           (:prompt . ((:type . :string)
                       (:description . "Instructions for the subagent."))))))
 
-(defmethod tool:tool-execute ((tool subagent-tool) args)
+(defmethod tool:tool-execute ((tool subagent-tool) args &rest options)
   (if (null args)
       (error "No arguments specified."))
 
@@ -359,37 +360,38 @@ These are tool descriptions:~%~%~A"
     (if (null prompt)
         (error "Prompt not specified."))
 
-    (let* ((persona
-             (find-if (lambda (p) (string-equal name (persona:name p)))
-                      (personas tool))))
+    (destructuring-bind (&key (llm nil)) options
+      (let* ((persona
+               (find-if (lambda (p) (string-equal name (persona:name p)))
+                        (personas tool))))
 
-      (cond ((and (deep-thinking-p tool) (persona:parallel-p persona))
-             (let* ((count 3)
-                    (subs (create-subagents llm persona count))
-                    (history (create-subagent-history llm persona)))
+        (cond ((and (deep-thinking-p tool) (persona:parallel-p persona))
+               (let* ((count 3)
+                      (subs (create-subagents llm persona count))
+                      (history (create-subagent-history llm persona)))
 
-               (signal 'conditions:tool-call
-                       :text (format nil "Starting ~A subagent" count) :name name)
+                 (signal 'conditions:tool-call
+                         :text (format nil "Starting ~A subagent" count) :name name)
 
-               (let* ((results (lparallel:pmapcar
-                                (lambda (sub-llm)
-                                  (llm:send-query sub-llm persona prompt history))
-                                subs))
-                      (response (format nil "~{---- subagent response: -----~%~A~^~%~}" results)))
+                 (let* ((results (lparallel:pmapcar
+                                  (lambda (sub-llm)
+                                    (llm:send-query sub-llm persona prompt history))
+                                  subs))
+                        (response (format nil "~{---- subagent response: -----~%~A~^~%~}" results)))
+
+                   (put-last-subagent-response llm name response)
+
+                   response)))
+
+              (t
+               (let* ((subagent (create-subagent llm persona))
+                      (history (create-subagent-history llm persona))
+                      (response (send-query subagent persona
+                                            prompt history)))
 
                  (put-last-subagent-response llm name response)
 
-                 response)))
-
-            (t
-             (let* ((subagent (create-subagent llm persona))
-                    (history (create-subagent-history llm persona))
-                    (response (send-query subagent persona
-                                              prompt history)))
-
-               (put-last-subagent-response llm name response)
-
-               response))))))
+                 response)))))))
 
 (defun create-subagent-history (llm persona)
   (append (get-last-subagent-response llm persona)
