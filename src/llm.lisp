@@ -133,7 +133,6 @@ You must use loop_detection tool as notify the user."
   (let* ((sub (create-subagent llm loop-detector-persona)))
     (handler-bind ((tool:no-loop (lambda (e)
                                    (declare (ignore e))
-                                   (break)
                                    (return-from detect-loop-in-conversation))))
       (send-query/internal sub
                            loop-detector-persona
