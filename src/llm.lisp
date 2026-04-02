@@ -22,9 +22,8 @@
      #:last-in-history
      #:clear-history
      #:mode
-     #:iterative-code-validation
      #:subagent-tool
-     ))
+     #:create-subagent))
 
 (in-package :agent-code/src/llm)
 
@@ -77,8 +76,9 @@
                  :description "Assistant that detects if the current AI conversation is stuck in a loop."
                  :use-weaker-model-p t
                  :tools (list (make-instance 'tool:loop-detection-tool))
-                 :system
-                 "Check the current conversation and determine if there is a duplication in the last 10 messages or tool calls.
+                 :user
+                 "Check the current conversation and determine if there is a duplication in the last tool calls.
+Consider a loop when tool calls don't bring any value to the continuation of investigation.
 You must use loop_detection tool as notify the user."
                  :parallel-p t))
 
@@ -92,10 +92,14 @@ You must use loop_detection tool as notify the user."
                   (mcps this))))
 
 (defmethod send-query ((this llm) persona query history)
+  (handler-case
+      (send-query/internal this persona query history)
 
-  (if (and (history this)
-           (= 0 (mod (length (history this)) 10)))
-      (detect-loop-in-conversation this))
+    (tool:loop-detected (e)
+      (log:info "Loop is detected")
+      (format nil "Loop is detected in tool calls: ~A" (tool:description e)))))
+
+(defmethod send-query/internal ((this llm) persona query history)
 
   (if history
       (setf (history this) history))
@@ -111,23 +115,30 @@ You must use loop_detection tool as notify the user."
             :total-tokens (api-provider:get-total-tokens (api-provider this) api-response-alist))
 
     (handler-case
-        (let ((llm-responses (api-provider:handle-response (api-provider this) api-response-alist)))
+        (let* ((previous-len (length (history this)))
+               (llm-responses (api-provider:handle-response (api-provider this) api-response-alist)))
+
+          (if (< (mod (+ previous-len (length llm-responses)) 50)
+                 (mod previous-len 50))
+              (detect-loop-in-conversation this))
+
           (act-on-llm-response this persona llm-responses))
       (error (e)
-        (send-query this persona
-                    (format nil "Response was invalid: ~A" e)
-                    history)))))
+        (send-query/internal this persona
+                             (format nil "Response was invalid: ~A" e)
+                             history)))))
 
 (defun detect-loop-in-conversation (llm)
   (signal 'conditions:llm-condition :text "Running loop detection.")
   (let* ((sub (create-subagent llm loop-detector-persona)))
     (handler-bind ((tool:no-loop (lambda (e)
                                    (declare (ignore e))
+                                   (break)
                                    (return-from detect-loop-in-conversation))))
-      (send-query sub
-                  loop-detector-persona
-                  (persona:system loop-detector-persona)
-                  (copy-list (history llm))))))
+      (send-query/internal sub
+                           loop-detector-persona
+                           (persona:system loop-detector-persona)
+                           (copy-list (history llm))))))
 
 (defmethod send-request ((this llm) persona query)
   (let* ((conversation (get-history this persona))
@@ -282,7 +293,7 @@ These are tool descriptions:~%~%~A"
                      :text (llm-response:text llm-response)))))
 
     (if funcalls-p
-        (send-query this persona nil nil)
+        (send-query/internal this persona nil nil)
         (llm-response:text (car (history this))))))
 
 (defmethod handle-function-call ((this llm) persona tool-name args)

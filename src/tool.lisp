@@ -27,6 +27,8 @@
      #:validation-tool
      #:validation-result-tool
      #:loop-detection-tool
+     #:loop-detected
+     #:description
      #:no-loop))
 
 (in-package :agent-code/src/tool)
@@ -429,10 +431,11 @@ Safety checks: max 1 operation, no overlapping line ranges."))
 
 (defun run-tests (test-cmd)
   "Run tests for specified file or directory."
+  (log:info "Running test command: ~A" test-cmd)
   (multiple-value-bind (output err code)
       (uiop:run-program test-cmd :ignore-error-status t :output :string :error-output :string)
     (if (> code 0)
-        `(:status :error :details ,(format nil "~A~%~A" output err))
+        `(:status :error :details ,(format nil "~A" output))
         `(:status :success :details "All tests passed"))))
 
 (defun run-custom-validation (function-name target-path parameters)
@@ -443,20 +446,21 @@ Safety checks: max 1 operation, no overlapping line ranges."))
 
 (defclass loop-detection-tool (tool)
   ((name :initform "loop_detection")
-   (description :initform "Result of loop detection. Call this to notify user wether loop is detected in the conversation.")
-   (properties :initform '((:certainty-percentage . ((:type . :integer)
-                                                     (:description . "Level of certainty weather the conversation
-is stuck in a loop and it's repeating. Can be between 0 and 100.")))
+   (description :initform "Result of loop detection. Call this to notify user whether loop in tool calls is detected.
+User direct prompts are not considered a loop, only tool calls can be in a loop!")
+   (properties :initform '((:loop-detected-percentage . ((:type . :integer)
+                                                          (:description . "Level of certainty whether the last tool calls
+are stuck in a loop and are repeating. Can be between 0 and 100.")))
                            (:description . ((:type . :string)
                                             (:description . "Details about detected loop.")))))
-   (required :initform '(:certainty-percentage)))
+   (required :initform '(:loop-detected-percentage)))
   (:documentation "Tool for give feedback about loop detection."))
 
 (defmethod tool-execute ((tool loop-detection-tool) args &rest options)
   (if (null args)
       (error "No arguments specified for validation."))
 
-  (let* ((certainty (parse-integer (aget args :certainty-percentage))))
+  (let* ((certainty (parse-integer (aget args :loop-detected-percentage))))
     (if (not (<= 0 certainty 100))
         (error "Certainty argument must be between 0 and 100"))
 

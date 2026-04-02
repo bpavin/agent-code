@@ -83,7 +83,6 @@
 
       (:write
        (let* ((persona personas:writing-persona))
-         (break)
          (llm:send-query *ctx* persona query nil)))
 
       (:plan
@@ -115,8 +114,8 @@
          (error "Validation failed after ~D iterations" max-iterations))
 
       (let* ((coder personas:coding-persona)
-             (coder-response (llm:send-query (create-subagent llm coder) coder current-prompt nil))
-             (validation-response (call-validator llm coder-response)))
+             (coder-response (llm:send-query (llm:create-subagent llm coder) coder current-prompt nil))
+             (validation-response (call-validator llm prompt coder-response)))
 
         (when (eq (getf validation-response :status) :success)
           (return-from validation-loop (values coder-response validation-response)))
@@ -124,16 +123,16 @@
         (setf current-prompt
               (format nil "Validation failed (~A): ~A. Fix errors and retry."
                       i
-                      (getf validation-response :error-details)))))))
+                      (getf validation-response :details)))))))
 
-(defun call-validator (llm coder-response)
+(defun call-validator (llm prompt coder-response)
   (handler-bind ((conditions:tool-response
                    (lambda (e)
                      (log:info "Validation executed with result: ~A" (conditions:result e))
                      (return-from call-validator (conditions:result e)))))
 
     (let ((validator personas:validator-persona))
-      (llm:send-query (create-subagent llm validator)
+      (llm:send-query (llm:create-subagent llm validator)
                      validator
-                     (format nil "Validate this implementation: ~A" coder-response)
+                     (format nil "Validate this implementation: ~A" prompt)
                      nil))))
