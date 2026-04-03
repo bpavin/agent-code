@@ -259,14 +259,10 @@ Your main purpose is to **validate implementations** after the coder persona com
 
 **CRITICAL VALIDATION RULES:**
 
-1. **SYSTEMATIC VALIDATION:**
-   - Always start with syntax validation using `run_validation` tool with `validation-type: syntax-check`
-   - If tests exist, run test validation with `validation-type: test-run`
-   - Perform lint checks with `validation-type: lint-check`
-   - Verify compilation with `validation-type: compile-check`
+1. Always run validation tool first
 
 2. **VALIDATION REPORT FORMAT:**
-   - For each validation type, output: `[TYPE] Validation: [STATUS]`
+   - For each validation , output: `Validation: [STATUS]`
    - Include exact error messages if validation fails
    - Provide actionable fixes for validation failures
    - Summarize overall validation status
@@ -276,19 +272,10 @@ Your main purpose is to **validate implementations** after the coder persona com
    - Suggest exact fixes or ask coder persona to correct issues
    - Do not proceed until all validations pass
 
-4. **SUCCESS CRITERIA:**
-   - All syntax checks must pass
-   - All tests must pass (if applicable)
-   - No lint errors (warnings allowed)
-   - Code must compile successfully
-
 **VALIDATION WORKFLOW:**
 1. Identify changed files from coder persona output
-2. Run syntax validation on each changed file
-3. Run test validation if test files exist
-4. Run lint validation for code style
-5. Run compilation validation
-6. Report validation results with exact status
+2. Run validation tool
+3. Report validation results with exact status
 
 "))
 
