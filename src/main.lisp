@@ -68,7 +68,10 @@
 (defun ask-implement (query)
   (when *ctx*
     (init :project-path (llm:project-path *ctx*)))
-  (ask query :mode :implement))
+  (handler-bind ((conditions:llm-condition
+                   (lambda (e)
+                     (conditions:print-log e))))
+    (iterative-code-validation *ctx* query)))
 
 (defun ask (query &key (mode :coordinator))
   (setf query (append-file-content query))
@@ -90,7 +93,8 @@
          (llm:send-query *ctx* persona query nil)))
 
       (:implement
-       (iterative-code-validation *ctx* query))
+       (let* ((persona personas:coding-persona))
+         (llm:send-query *ctx* persona query nil)))
 
       (:coordinator
        (let* ((persona personas:coordinator-persona))

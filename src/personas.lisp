@@ -4,6 +4,7 @@
     (:import-from :agent-code/src/tool)
     (:import-from :agent-code/src/persona)
     (:import-from :agent-code/src/llm)
+    (:import-from :agent-code/src/task-tool)
 	(:export
      #:base-persona
      #:loop-detector-persona
@@ -132,6 +133,7 @@ Rules:
                  :parallel-p t
                  :before-in-chain "explorer"
                  :tools (list (make-instance 'tool:read-many-files-tool)
+                              (make-instance 'task-tool:task-tool)
                               ;(make-instance 'tool:dir-tool)
                               (make-instance 'tool:bash-tool))
                  :user
