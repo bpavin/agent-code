@@ -136,7 +136,7 @@ You must use loop_detection tool as notify the user."
                                    (return-from detect-loop-in-conversation))))
       (send-query/internal sub
                            loop-detector-persona
-                           (persona:system loop-detector-persona)
+                           (persona:user loop-detector-persona)
                            (copy-list (history llm))))))
 
 (defmethod send-request ((this llm) persona query)

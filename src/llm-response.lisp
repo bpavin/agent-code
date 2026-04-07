@@ -27,6 +27,10 @@
    (arguments)
    (status)))
 
+(defmethod print-object ((this llm-response) s)
+  (print-unreadable-object (this s :type t :identity t)
+    (format s "name=~A" (name this))))
+
 (defun create-message (role content)
   (if (and role content (not (string-equal "" content)))
       (make-instance 'llm-response:llm-response

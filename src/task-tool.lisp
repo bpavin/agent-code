@@ -26,69 +26,77 @@ Use this index to specify which task item you want to update. Index is mandatory
                                 (:status . ((:type . :string)
                                             (:description . "Status of the task. Can be 'pending', 'approved'. Status is mandatory for insert and update.")))))
    (tool:required :initform '(:operation))
-   (history :initform nil :accessor history)))
+   (history :initform (make-hash-table) :accessor history)))
+
+(defmethod get-history ((this task-tool) llm)
+  (multiple-value-bind (l e) (gethash (sxhash llm) (history this))
+    (if e
+        l
+        (setf (gethash (sxhash llm) (history this)) (make-list 0)))))
 
 (defmethod tool:tool-execute ((tool task-tool) args &rest options)
   (if (null args)
       (error "No arguments specified."))
 
-  (let* ((operation (tool:aget args :operation)))
-    (if (null operation)
-        (error "Operation is not specified."))
+  (destructuring-bind (&key (llm nil)) options
+    (let* ((history (get-history tool llm))
+           (operation (tool:aget args :operation)))
+      (if (null operation)
+          (error "Operation is not specified."))
 
-    (alexandria:switch (operation :test #'string-equal)
-      ("list"
-       (if (= 0 (length (history tool)))
-           "Task list is empty."
-           (let ((c 0))
-             (reduce (lambda (sum i)
-                       (format nil "~A~%Task id: ~A~%~%Task status: ~A~%~%Task content:~%~A~%-----"
-                               sum
-                               (incf c)
-                               (tool:aget i :status)
-                               (tool:aget i :content)))
-                     (history tool)
-                     :initial-value ""))))
+      (alexandria:switch (operation :test #'string-equal)
+        ("list"
+         (if (= 0 (length history))
+             "Task list is empty."
+             (let ((c 0))
+               (reduce (lambda (sum i)
+                         (format nil "~A~%Task id: ~A~%~%Task status: ~A~%~%Task content:~%~A~%-----"
+                                 sum
+                                 (incf c)
+                                 (tool:aget i :status)
+                                 (tool:aget i :content)))
+                       history
+                       :initial-value ""))))
 
-      ("insert"
-       (let ((content (tool:aget args :content))
-             (status (tool:aget args :status)))
-         (if (null content)
-             (error "Insert requires content."))
-         (if (null status)
-             (error "Insert requires status."))
-         (setf (history tool)
-               (append (history tool)
-                       (list
-                        (list (cons :content content)
-                              (cons :status status))))))
-       "Task successfully inserted.")
+        ("insert"
+         (let ((content (tool:aget args :content))
+               (status (tool:aget args :status)))
+           (if (null content)
+               (error "Insert requires content."))
+           (if (null status)
+               (error "Insert requires status."))
+           (setf (gethash (sxhash llm) (history tool))
+                 (append history
+                         (list
+                          (list (cons :content content)
+                                (cons :status status))))))
+         "Task successfully inserted.")
 
-      ("update"
-       (let* ((index (if (stringp (tool:aget args :index))
-                         (parse-integer (tool:aget args :index))
-                         (tool:aget args :index)))
-              (i (max 0 (- index 1)))
-              (content (tool:aget args :content))
-              (status (tool:aget args :status)))
-         (if (null content)
-             (error "Insert requires content."))
-         (if (null status)
-             (error "Insert requires status."))
-         (setf (nth i (history tool))
-               (list (cons :content content)
-                     (cons :status status)))
-         "Task successfully updated."))
+        ("update"
+         (let* ((index (if (stringp (tool:aget args :index))
+                           (parse-integer (tool:aget args :index))
+                           (tool:aget args :index)))
+                (i (max 0 (- index 1)))
+                (content (tool:aget args :content))
+                (status (tool:aget args :status)))
+           (if (null content)
+               (error "Insert requires content."))
+           (if (null status)
+               (error "Insert requires status."))
+           (setf (nth i history)
+                 (list (cons :content content)
+                       (cons :status status)))
+           "Task successfully updated."))
 
-      ("remove"
-       (let* ((index (if (stringp (tool:aget args :index))
-                         (parse-integer (tool:aget args :index))
-                         (tool:aget args :index)))
-              (i (max 0 (- index 1))))
-         (setf (history tool)
-               (delete (nth i (history tool))
-                       (history tool))))
-       "Task successfully removed.")
+        ("remove"
+         (let* ((index (if (stringp (tool:aget args :index))
+                           (parse-integer (tool:aget args :index))
+                           (tool:aget args :index)))
+                (i (max 0 (- index 1))))
+           (setf (gethash (sxhash llm) (history tool))
+                 (delete (nth i history)
+                         history)))
+         "Task successfully removed.")
 
-      (t
-       (error "Invalid operation: ~A" operation)))))
+        (t
+         (error "Invalid operation: ~A" operation))))))
