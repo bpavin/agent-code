@@ -1,6 +1,7 @@
 (defpackage :agent-code/src/task-tool
   (:use :cl)
   (:nicknames :task-tool)
+  (:import-from :agent-code/src/llm)
   (:import-from :agent-code/src/tool)
   (:export
    #:task-tool
@@ -25,20 +26,16 @@ Use this index to specify which task item you want to update. Index is mandatory
                                              (:description . "Information you want to update task with. Content is mandatory for insert and update.")))
                                 (:status . ((:type . :string)
                                             (:description . "Status of the task. Can be 'pending', 'approved'. Status is mandatory for insert and update.")))))
-   (tool:required :initform '(:operation))
-   (history :initform (make-hash-table) :accessor history)))
+   (tool:required :initform '(:operation))))
 
 (defmethod get-history ((this task-tool) llm)
-  (multiple-value-bind (l e) (gethash (sxhash llm) (history this))
-    (if e
-        l
-        (setf (gethash (sxhash llm) (history this)) (make-list 0)))))
+  (llm:shared-memory llm))
 
 (defmethod tool:tool-execute ((tool task-tool) args &rest options)
   (if (null args)
       (error "No arguments specified."))
 
-  (destructuring-bind (&key (llm nil)) options
+  (destructuring-bind (&key (llm nil) (shared-memory nil)) options
     (let* ((history (get-history tool llm))
            (operation (tool:aget args :operation)))
       (if (null operation)
@@ -65,7 +62,7 @@ Use this index to specify which task item you want to update. Index is mandatory
                (error "Insert requires content."))
            (if (null status)
                (error "Insert requires status."))
-           (setf (gethash (sxhash llm) (history tool))
+           (setf (llm:shared-memory llm)
                  (append history
                          (list
                           (list (cons :content content)
@@ -93,7 +90,7 @@ Use this index to specify which task item you want to update. Index is mandatory
                            (parse-integer (tool:aget args :index))
                            (tool:aget args :index)))
                 (i (max 0 (- index 1))))
-           (setf (gethash (sxhash llm) (history tool))
+           (setf (llm:shared-memory llm)
                  (delete (nth i history)
                          history)))
          "Task successfully removed.")

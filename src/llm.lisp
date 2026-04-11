@@ -17,6 +17,7 @@
      #:project-path
      #:project-summary
      #:history
+     #:shared-memory
      #:api-provider
      #:last-subagent-response
      #:last-in-history
@@ -67,6 +68,8 @@
    (deep-thinking-p :initform nil
                     :initarg :deep-thinking-p
                     :accessor deep-thinking-p)
+   (shared-memory :initform nil
+                  :accessor shared-memory)
    (last-subagent-response :initform (make-hash-table)
                            :accessor last-subagent-response)))
 
