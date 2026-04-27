@@ -153,6 +153,8 @@ Files are prepended with line numbers separated from file content with character
   (if (null args)
       (error "No command specified."))
   (let ((cmd (aget args :command)))
+    (if (serapeum:string-prefix-p "rm " cmd)
+        (error "Command is not allowed ~A" "rm"))
     (if (serapeum:string-contains-p " rm " cmd)
         (error "Command is not allowed ~A" "rm"))
 
