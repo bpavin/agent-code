@@ -187,7 +187,7 @@ You must use loop_detection tool as notify the user."
 
         (trivial-timeout:timeout-error (e)
           (declare (ignore e))
-          (log:warn "Request timedout after ~A seconds" timeout-seconds))
+          (log:warn "Request timed out after ~A seconds" timeout-seconds))
         (dex:http-request-too-many-requests (e)
           (log:warn "~A" e)
           (if (> (incf retry-count) 10)
