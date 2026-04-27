@@ -1,6 +1,7 @@
 (defpackage :agent-code/src/llm
 	(:use :cl)
     (:nicknames :llm)
+    (:import-from :trivial-timeout)
     (:import-from :cl-ppcre)
     (:import-from :cl-json)
     (:import-from :lparallel)
@@ -161,6 +162,7 @@ You must use loop_detection tool as notify the user."
 
 (defun request-post (this model content)
   (let (result
+        (timeout-seconds (* 2 60))
         (url (format nil "~A~A"
                      (host this)
                      (api-provider:url (api-provider this)))))
@@ -173,7 +175,7 @@ You must use loop_detection tool as notify the user."
         ((null retry)
          result)
       (handler-case
-          (progn
+          (trivial-timeout:with-timeout (timeout-seconds)
             (setf result
                   (dex:post url
                             :insecure t
@@ -182,6 +184,10 @@ You must use loop_detection tool as notify the user."
                                             `("Authorization" . ,(format nil "Bearer ~A" (api-key this)))))
                             :content content))
             (setf retry nil))
+
+        (trivial-timeout:timeout-error (e)
+          (declare (ignore e))
+          (log:warn "Request timedout after ~A seconds" timeout-seconds))
         (dex:http-request-too-many-requests (e)
           (log:warn "~A" e)
           (if (> (incf retry-count) 10)
