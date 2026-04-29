@@ -91,7 +91,7 @@ Use clear section headers exactly as listed above."))
                  :use-weaker-model-p t
                  :tools (list (make-instance 'tool:read-many-files-tool)
                               (make-instance 'tool:write-tool)
-                              (make-instance 'task-tool:task-tool)
+                              (make-instance 'task-tool:task-tool :can-write-p t)
                               ;(make-instance 'tool:edit-file-tool)
                               (make-instance 'tool:line-edit-tool)
                               ;; (make-instance 'tool:patch-tool)
@@ -117,7 +117,7 @@ Rules:
                  :use-weaker-model-p t
                  :tools (list (make-instance 'tool:read-many-files-tool)
                               (make-instance 'tool:write-tool)
-                              (make-instance 'task-tool:task-tool)
+                              (make-instance 'task-tool:task-tool :can-write-p t)
                               (make-instance 'tool:line-edit-tool))
                  :user "Your only job is to modify files exactly as requested.
 Never write summarizations. Write content exactly as requested.

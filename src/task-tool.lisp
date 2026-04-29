@@ -24,9 +24,10 @@
          (setf (tool:properties this)
                (create-properties
                 "WRITE: Write all tasks to the file. Path is required."))
-         (nconc (tool:properties this)
-                '((:path . ((:type . :string)
-                            (:description . "Absolute path for file."))))))
+         (setf (tool:properties this)
+               (append (tool:properties this)
+                       '((:path . ((:type . :string)
+                                   (:description . "Absolute path for file.")))))))
 
         (t (setf (tool:properties this)
                  (create-properties "")))))
