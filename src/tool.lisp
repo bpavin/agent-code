@@ -307,14 +307,15 @@ Safety checks: max 1 operation, no overlapping line ranges."))
       (push (list operation start end content)
             op-list)
 
-      (let ((edited-file (apply-changes-to-file path op-list)))
+      (let ((edited-file (apply-changes-to-file path op-list))
+            (content-lines (max 1 (cl-ppcre:count-matches "\\\\n" content))))
         (alexandria:write-string-into-file edited-file path :if-exists :supersede)
 
         (format nil "File was successfully edited.~%~%Changes with a few surrounding lines:~%~A"
                 (read-file path
                            (max 1 (- start 5))
                            (if (eq operation :replace)
-                               (+ (length content) 5)
+                               (+ start content-lines 5)
                                (+ end 5))))))))
 
 (defun apply-changes-to-file (file-path operations)
