@@ -162,7 +162,7 @@ You must use loop_detection tool as notify the user."
 
 (defun request-post (this model content)
   (let (result
-        (timeout-seconds (* 2 60))
+        (timeout-seconds (* 3 60))
         (url (format nil "~A~A"
                      (host this)
                      (api-provider:url (api-provider this)))))
