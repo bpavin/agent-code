@@ -111,14 +111,14 @@ You must use loop_detection tool as notify the user."
   (if query
       (add-history this (llm-response:create-message :user query)))
 
-  (let* ((api-response (send-request this persona query))
-         (api-response-alist (cl-json:decode-json-from-string api-response)))
+  (handler-case
+      (let* ((api-response (send-request this persona query))
+             (api-response-alist (cl-json:decode-json-from-string api-response)))
 
-    (signal 'conditions:llm-response
-            :text "LLM response" :json api-response
-            :total-tokens (api-provider:get-total-tokens (api-provider this) api-response-alist))
+        (signal 'conditions:llm-response
+                :text "LLM response" :json api-response
+                :total-tokens (api-provider:get-total-tokens (api-provider this) api-response-alist))
 
-    (handler-case
         (let* ((previous-len (length (history this)))
                (llm-responses (api-provider:handle-response (api-provider this) api-response-alist)))
 
@@ -126,11 +126,14 @@ You must use loop_detection tool as notify the user."
                  (mod previous-len 50))
               (detect-loop-in-conversation this))
 
-          (act-on-llm-response this persona llm-responses))
-      (error (e)
-        (send-query/internal this persona
-                             (format nil "Response was invalid: ~A" e)
-                             history)))))
+          (act-on-llm-response this persona llm-responses)))
+    (error (e)
+      (send-query/internal this persona
+                           (format nil "Response was invalid: ~A" e)
+                           history))
+    (context-exceeded (e)
+      (declare (ignore e))
+      (compact-history this))))
 
 (defun detect-loop-in-conversation (llm)
   (signal 'conditions:llm-condition :text "Running loop detection.")
@@ -142,6 +145,18 @@ You must use loop_detection tool as notify the user."
                            loop-detector-persona
                            (persona:user loop-detector-persona)
                            (copy-list (history llm))))))
+
+(defun compact-history (llm)
+  (signal 'conditions:llm-condition :text "Compacting history.")
+  (let* ((last-query (car (history llm)))
+         (summarization (send-query/internal llm
+                                            personas:summary-persona
+                                            (persona:user personas:summary-persona)
+                                            (cdr (history llm)))))
+    (send-query/internal llm
+                         personas:summary-persona
+                         (llm-response:text last-query)
+                         (list (llm-response:create-message :assistant summarization)))))
 
 (defmethod send-request ((this llm) persona query)
   (let* ((conversation (get-history this persona))
@@ -196,7 +211,11 @@ You must use loop_detection tool as notify the user."
         (dex:http-request-bad-request (e)
           (setf retry nil)
           (log:warn "request: ~A~%response: ~A" content e)
-          (error e))))))
+          (if (search "exceeds the context window limit" (dex:response-body e))
+              (error 'context-exceeded)
+              (error e)))))))
+
+(define-condition context-exceeded () ())
 
 (defmethod compress-history ((this llm))
   "Remove all history entries that are considered old."
