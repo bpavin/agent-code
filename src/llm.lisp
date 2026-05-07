@@ -12,6 +12,7 @@
     (:import-from :agent-code/src/tool)
     (:import-from :agent-code/src/mcp)
     (:import-from :agent-code/src/llm-response)
+    (:import-from :agent-code/src/summary-persona)
 	(:export
      #:llm
      #:send-query
@@ -148,13 +149,14 @@ You must use loop_detection tool as notify the user."
 
 (defun compact-history (llm)
   (signal 'conditions:llm-condition :text "Compacting history.")
-  (let* ((last-query (car (history llm)))
+  (let* ((persona summary-persona:summary-persona)
+         (last-query (car (history llm)))
          (summarization (send-query/internal llm
-                                            personas:summary-persona
-                                            (persona:user personas:summary-persona)
-                                            (cdr (history llm)))))
+                                             persona
+                                             (persona:user persona)
+                                             (cdr (history llm)))))
     (send-query/internal llm
-                         personas:summary-persona
+                         persona
                          (llm-response:text last-query)
                          (list (llm-response:create-message :assistant summarization)))))
 
