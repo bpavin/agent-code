@@ -43,11 +43,13 @@
 
 (defmethod print-log ((this llm-response))
   (if (text this)
-      (log:info "~A~A"
-                (if (total-tokens this)
-                    (format nil "[total-tokens=~A] " (total-tokens this))
-                    "")
-                (if (text this) (text this)))))
+      (if (log:debug)
+          (log:debug "~%~A" (json this))
+          (log:info "~A~A"
+                 (if (total-tokens this)
+                     (format nil "[total-tokens=~A] " (total-tokens this))
+                     "")
+                 (if (text this) (text this))))))
 
 (define-condition tool-call (llm-condition)
   ((name :initarg :name :reader name :initform nil)
