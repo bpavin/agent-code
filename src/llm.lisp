@@ -338,6 +338,8 @@ These are tool descriptions:~%~%~A"
         (cond (T
                (let ((tool-result (tool:tool-execute tool args :llm this)))
 
+                 (tool:cleanup-history tool (history this))
+
                  (signal 'conditions:tool-response
                          :text "Tool executed successfully"
                          :name tool-name :args args :result tool-result)

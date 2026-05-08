@@ -15,6 +15,7 @@
      #:aget
      #:to-alist
      #:tool-execute
+     #:cleanup-history
 
      #:read-many-files-tool
      #:write-tool
@@ -52,6 +53,12 @@
     (:parameters . ((:type . :object)
                     (:properties . ,(properties this))
                     (:required . ,(required this))))))
+
+(defmethod cleanup-history ((this tool) history)
+  "Default implementation that does nothing.
+Tools can override this method for specialized cleanup."
+  (declare (ignore this history))
+  nil)
 
 (defun aget (alist item)
   (alexandria:assoc-value alist item))
