@@ -25,7 +25,7 @@
 
 (defgeneric create-request (this model conversation tools))
 
-(defgeneric handle-response (this api-response))
+(defgeneric handle-response (this api-response request-id))
 
 (defgeneric create-response (this llm-response))
 
