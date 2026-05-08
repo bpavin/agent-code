@@ -1,32 +1,32 @@
 (defpackage :agent-code/src/llm
-	(:use :cl)
-    (:nicknames :llm)
-    (:import-from :trivial-timeout)
-    (:import-from :cl-ppcre)
-    (:import-from :cl-json)
-    (:import-from :lparallel)
-    (:import-from :defclass-std)
-    (:import-from :agent-code/src/conditions)
-    (:import-from :agent-code/src/api-provider)
-    (:import-from :agent-code/src/persona)
-    (:import-from :agent-code/src/tool)
-    (:import-from :agent-code/src/mcp)
-    (:import-from :agent-code/src/llm-response)
-    (:import-from :agent-code/src/summary-persona)
-	(:export
-     #:llm
-     #:send-query
-     #:project-path
-     #:project-summary
-     #:history
-     #:shared-memory
-     #:api-provider
-     #:last-subagent-response
-     #:last-in-history
-     #:clear-history
-     #:mode
-     #:subagent-tool
-     #:create-subagent))
+  (:use :cl)
+  (:nicknames :llm)
+  (:import-from :trivial-timeout)
+  (:import-from :cl-ppcre)
+  (:import-from :cl-json)
+  (:import-from :lparallel)
+  (:import-from :defclass-std)
+  (:import-from :agent-code/src/conditions)
+  (:import-from :agent-code/src/api-provider)
+  (:import-from :agent-code/src/persona)
+  (:import-from :agent-code/src/tool)
+  (:import-from :agent-code/src/mcp)
+  (:import-from :agent-code/src/llm-response)
+  (:import-from :agent-code/src/summary-persona)
+  (:export
+   #:llm
+   #:send-query
+   #:project-path
+   #:project-summary
+   #:history
+   #:shared-memory
+   #:api-provider
+   #:last-subagent-response
+   #:last-in-history
+   #:clear-history
+   #:mode
+   #:subagent-tool
+   #:create-subagent))
 
 (in-package :agent-code/src/llm)
 
@@ -120,8 +120,9 @@ You must use loop_detection tool as notify the user."
                 :text "LLM response" :json api-response
                 :total-tokens (api-provider:get-total-tokens (api-provider this) api-response-alist))
 
-        (let* ((previous-len (length (history this)))
-               (llm-responses (api-provider:handle-response (api-provider this) api-response-alist)))
+        (let* ((request-id (llm-response:generate-request-id))
+               (previous-len (length (history this)))
+               (llm-responses (api-provider:handle-response (api-provider this) api-response-alist request-id)))
 
           (if (< (mod (+ previous-len (length llm-responses)) 50)
                  (mod previous-len 50))

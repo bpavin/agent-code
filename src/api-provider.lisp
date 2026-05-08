@@ -79,7 +79,7 @@
          (usage-alist (alexandria:assoc-value api-alist :usage)))
     (alexandria:assoc-value usage-alist :total--tokens)))
 
-(defmethod handle-response ((this chat-completion-api-provider) api-response)
+(defmethod handle-response ((this chat-completion-api-provider) api-response request-id)
   (let* ((api-alist (if (stringp api-response)
                         (cl-json:decode-json-from-string api-response)
                         api-response))
@@ -100,7 +100,8 @@
                                  :output-type "function_call"
                                  :call-id (format nil "call_~A" (serapeum:random-in-range 0 10000))
                                  :name (alexandria:assoc-value fn-info :name)
-                                 :arguments (decode-json (alexandria:assoc-value fn-info :arguments)))
+                                 :arguments (decode-json (alexandria:assoc-value fn-info :arguments))
+                                 :request-id request-id)
                   llm-responses)))
 
         (if (not tool-calls-p)
@@ -114,11 +115,12 @@
                                            :output-type "function_call"
                                            :call-id (format nil "call_~A" (serapeum:random-in-range 0 10000))
                                            :name (alexandria:assoc-value json-alist :name)
-                                           :arguments (alexandria:assoc-value json-alist :parameters))
+                                           :arguments (alexandria:assoc-value json-alist :parameters)
+                                           :request-id request-id)
                             llm-responses))))))
 
         (if (not (string-equal "" result))
-            (push (llm-response:create-message (alexandria:assoc-value message-alist :role) result)
+            (push (llm-response:create-message (alexandria:assoc-value message-alist :role) result request-id)
                   llm-responses))))
 
     llm-responses))
@@ -192,7 +194,7 @@
          (usage-alist (alexandria:assoc-value api-alist :usage)))
     (alexandria:assoc-value usage-alist :total--tokens)))
 
-(defmethod handle-response ((this responses-api-provider) api-response)
+(defmethod handle-response ((this responses-api-provider) api-response request-id)
   (let* ((api-alist (if (stringp api-response)
                         (cl-json:decode-json-from-string api-response)
                         api-response))
@@ -210,7 +212,8 @@
                              :name (alexandria:assoc-value output :name)
                              :arguments (decode-json (alexandria:assoc-value output :arguments) :throwp t)
                              :role (alexandria:assoc-value output :role)
-                             :text result)
+                             :text result
+                             :request-id request-id)
               llm-responses)))
 
     (nreverse llm-responses)))
