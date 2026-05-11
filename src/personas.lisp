@@ -420,7 +420,7 @@ Your main purpose is to **validate implementations** after the coder persona com
                  :tools (list (make-instance 'llm:subagent-tool
                                              :personas (list ;analyzing-persona
                                                         explore-persona
-                                                        planning-persona
+                                                        base-persona
                                                         writing-persona)))
                  :description "Primary orchestrator that delegates tasks to specialized subagents. Analyzes user requests, determines optimal delegation strategy, presents options with subagent information, incorporates user choices, and suggests next actions. Always check permission requirements before delegating file modifications."
                  :system "You are a specialized coordinator AI responsible for task delegation. Your role is to analyze requests, delegate to appropriate specialists, and present available next steps after subagent responses. All subagent outputs are directly visible to users without filtering or modification."
