@@ -3,6 +3,7 @@
   (:nicknames :task-tool)
   (:import-from :agent-code/src/llm)
   (:import-from :agent-code/src/tool)
+  (:import-from :agent-code/src/llm-response)
   (:export
    #:task-tool
    #:+task-tool-name+))
@@ -53,6 +54,23 @@ Use this index to specify which task item you want to update. Index is mandatory
 
 (defmethod get-history ((this task-tool) llm)
   (llm:shared-memory llm))
+
+(defmethod tool:cleanup-history ((this task-tool) args &rest options)
+  "When task-tool receives a LIST operation, find all previous task-tool executions
+   in the history by tool name and return their request IDs as a list."
+  (declare (ignore this options))
+  
+  (let ((operation (tool:aget args :operation)))
+    (when (and operation (string-equal operation "list"))
+      (let* ((llm (getf options :llm))
+             (history (when llm (llm:history llm)))
+             (request-ids '()))
+        (when history
+          (loop for response in history
+                when (string= (llm-response:name response) +task-tool-name+)
+                  do (let ((request-id (llm-response:request-id response)))
+                       (pushnew request-id request-ids :test #'string=)))))
+        request-ids)))
 
 (defmethod tool:tool-execute ((tool task-tool) args &rest options)
   (if (null args)

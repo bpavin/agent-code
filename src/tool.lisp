@@ -54,10 +54,10 @@
                     (:properties . ,(properties this))
                     (:required . ,(required this))))))
 
-(defmethod cleanup-history ((this tool) history)
+(defmethod cleanup-history ((this tool) args &rest options)
   "Default implementation that does nothing.
 Tools can override this method for specialized cleanup."
-  (declare (ignore this history))
+  (declare (ignore this args options))
   nil)
 
 (defun aget (alist item)
