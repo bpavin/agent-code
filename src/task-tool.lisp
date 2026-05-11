@@ -58,7 +58,7 @@ Use this index to specify which task item you want to update. Index is mandatory
 (defmethod tool:cleanup-history ((this task-tool) args &rest options)
   "When task-tool receives a LIST operation, find all previous task-tool executions
    in the history by tool name and return their request IDs as a list."
-  (declare (ignore this options))
+  (declare (ignore this))
   
   (let ((operation (tool:aget args :operation)))
     (when (and operation (string-equal operation "list"))
@@ -69,8 +69,8 @@ Use this index to specify which task item you want to update. Index is mandatory
           (loop for response in history
                 when (string= (llm-response:name response) +task-tool-name+)
                   do (let ((request-id (llm-response:request-id response)))
-                       (pushnew request-id request-ids :test #'string=)))))
-        request-ids)))
+                       (pushnew request-id request-ids :test #'string=))))
+        request-ids))))
 
 (defmethod tool:tool-execute ((tool task-tool) args &rest options)
   (if (null args)

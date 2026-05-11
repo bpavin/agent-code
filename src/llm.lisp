@@ -105,37 +105,38 @@ You must use loop_detection tool as notify the user."
       (format nil "Loop is detected in tool calls: ~A" (tool:description e)))))
 
 (defmethod send-query/internal ((this llm) persona query history)
+  (let ((request-id (llm-response:generate-request-id)))
 
-  (if history
-      (setf (history this) history))
+    (if history
+        (setf (history this) history))
 
-  (if query
-      (add-history this (llm-response:create-message :user query)))
+    (if query
+        (add-history this (llm-response:create-message :user query request-id)))
 
-  (handler-case
-      (let* ((api-response (send-request this persona query))
-             (api-response-alist (cl-json:decode-json-from-string api-response)))
+    (handler-case
+        (let* ((api-response (send-request this persona query))
+               (api-response-alist (cl-json:decode-json-from-string api-response)))
 
-        (signal 'conditions:llm-response
-                :text "LLM response" :json api-response
-                :total-tokens (api-provider:get-total-tokens (api-provider this) api-response-alist))
+          (signal 'conditions:llm-response
+                  :text "LLM response" :json api-response
+                  :total-tokens (api-provider:get-total-tokens (api-provider this) api-response-alist))
 
-        (let* ((request-id (llm-response:generate-request-id))
-               (previous-len (length (history this)))
-               (llm-responses (api-provider:handle-response (api-provider this) api-response-alist request-id)))
+          (let* (
+                 (previous-len (length (history this)))
+                 (llm-responses (api-provider:handle-response (api-provider this) api-response-alist request-id)))
 
-          (if (< (mod (+ previous-len (length llm-responses)) 50)
-                 (mod previous-len 50))
-              (detect-loop-in-conversation this))
+            (if (< (mod (+ previous-len (length llm-responses)) 50)
+                   (mod previous-len 50))
+                (detect-loop-in-conversation this))
 
-          (act-on-llm-response this persona llm-responses)))
-    (error (e)
-      (send-query/internal this persona
-                           (format nil "Response was invalid: ~A" e)
-                           history))
-    (context-exceeded (e)
-      (declare (ignore e))
-      (compact-history this))))
+            (act-on-llm-response this persona llm-responses)))
+      (error (e)
+        (send-query/internal this persona
+                             (format nil "Response was invalid: ~A" e)
+                             history))
+      (context-exceeded (e)
+        (declare (ignore e))
+        (compact-history this)))))
 
 (defun detect-loop-in-conversation (llm)
   (signal 'conditions:llm-condition :text "Running loop detection.")
