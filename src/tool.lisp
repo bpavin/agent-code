@@ -96,7 +96,7 @@ Files are prepended with line numbers separated from file content with character
 
 (defclass write-tool (tool)
   ((name :initform "write_file")
-   (description :initform "Writes content to a file on disk. File must already exist, and it won't overwrite existing files.")
+   (description :initform "Writes content to a file on disk. If file already exists it will be overwritten with new content.")
    (properties :initform '((:path . ((:type . :string)
                                      (:description . "Absolute path of the file.")))
                            (:content . ((:type . :string)
@@ -106,7 +106,8 @@ Files are prepended with line numbers separated from file content with character
 (defmethod tool-execute ((tool write-tool) args &rest options)
   (if (< (length args) 2)
       (error "Not enough arguments specified for writing."))
-  (alexandria:write-string-into-file (aget args :content) (aget args :path))
+  (alexandria:write-string-into-file (aget args :content) (aget args :path)
+                                     :if-exists :supersede)
   "Success, file is written.")
 
 (defclass edit-file-tool (tool)
