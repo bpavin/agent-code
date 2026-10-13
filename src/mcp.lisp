@@ -81,20 +81,72 @@
                     (:method . ,method)
                     ,(if params `(:params . ,params))))))
 
-      (multiple-value-bind (raw-response status response-headers) (dex:post (url this)
-                                                                   :content json
-                                                                   :basic-auth basic-auth
-                                                                   :headers request-headers
-                                                                   :connect-timeout timeout
-                                                                   :read-timeout timeout)
-        (declare (ignore status))
-        (alexandria:switch ((gethash "content-type" response-headers) :test #'string-equal)
-          ("text/event-stream"
-           (dolist (line (cl-ppcre:split "\\r\\n|\\n" raw-response))
-             (when (serapeum:string-prefix-p "data: " line)
-               (let ((alist (cl-json:decode-json-from-string (subseq line 6))))
-                 (return (values alist response-headers))))))
+      (handler-case
+       (multiple-value-bind (raw-response status response-headers) (dex:post (url this)
+                                                                             :content json
+                                                                             :basic-auth basic-auth
+                                                                             :headers request-headers
+                                                                             :connect-timeout timeout
+                                                                             :read-timeout timeout)
+         (declare (ignore status))
+         (alexandria:switch ((gethash "content-type" response-headers) :test #'string-equal)
+           ("text/event-stream"
+            (dolist (line (cl-ppcre:split "\\r\\n|\\n" raw-response))
+              (when (serapeum:string-prefix-p "data: " line)
+                (let ((alist (cl-json:decode-json-from-string (subseq line 6))))
+                  (return (values alist response-headers))))))
 
-          (t
-           (let ((alist (cl-json:decode-json-from-string raw-response)))
-             (values alist response-headers))))))))
+           (t
+            (let ((alist (cl-json:decode-json-from-string raw-response)))
+              (values alist response-headers)))))
+        (dex:http-request-unauthorized (e)
+          (log:info "MCP not authorized ~A" e)
+          ; (authenticate-mcp (dex:response-headers e))
+          )))))
+
+(defun authenticate-mcp (response-headers)
+  (let* ((www-auth (gethash "www-authenticate" response-headers)))
+    (cl-ppcre:do-register-groups (raw-metadata-url) ("Bearer resource_metadata=\"(.*?)\"" www-auth)
+      (log:info "got resource_metadata url: ~A" raw-metadata-url)
+      (let* ((metadata-url (cl-ppcre:regex-replace "/mcp$" raw-metadata-url ""))
+             (client-info (register-client metadata-url)))
+        (dex:get metadata-url))
+      )))
+
+(defun register-client (url)
+  (let* ((full-url (format nil "~Aregister" url))
+         (body
+           (cl-json:encode-json-alist-to-string
+            `((:client--name . "MCPClient")
+              (:redirect--uris "http://localhost:8080/callback")
+              (:grant--types "authorization_code" "refresh_token")
+              (:response--types "code")
+              (:token--endpoint--auth--method . "none")))))
+
+    (dex:post full-url :content body)))
+
+(defun authorize (url client-info)
+  (let* ((client-id (cdr (assoc :client--id client-info)))
+         (grant-type "authorization_code")
+         (response-type "code")
+         (scope (cdr (assoc :scope client-info)))
+         (redirect-uri (cadr (assoc :redirect--uris client-info)))
+
+         (query-path (format nil "?~A=~A&~A=~A&~A=~A&~A=~A&~A=~A&~A=~A"
+                             "client_id" client-id
+                             "grant_type" grant-type
+                             "response_type" response-type
+                             "scope" scope
+                             "redirect_uri" (quri:url-encode redirect-uri)
+                             "code_challenge" "123"))
+         (full-url (format nil "~Aauthorize~A" url query-path)))
+    (log:info "Enter url to browser: ~A" full-url)))
+
+(defun code-auth (url callback-url)
+
+  (let* ((callback-params-full (subseq callback-url (search "?" callback-url)))
+         (callback-params (quri:url-decode-params callback-params-full))
+         (query-path (format nil "?~A=~A" ))
+         (full-url (format nil "~Atoken" url))))
+
+  )

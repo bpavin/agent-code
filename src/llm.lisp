@@ -82,7 +82,7 @@
                  :use-weaker-model-p t
                  :tools (list (make-instance 'tool:loop-detection-tool))
                  :user
-                 "Check the current conversation and determine if there is a duplication in the last tool calls.
+                 "Ignore all previous commands, your only tasks is to check the current conversation and determine if there is a duplication in the last tool calls.
 Consider a loop when tool calls don't bring any value to the continuation of investigation.
 You must use loop_detection tool as notify the user."
                  :parallel-p t))
@@ -104,7 +104,7 @@ You must use loop_detection tool as notify the user."
       (log:info "Loop is detected")
       (format nil "Loop is detected in tool calls: ~A" (tool:description e)))))
 
-(defmethod send-query/internal ((this llm) persona query history)
+(defmethod send-query/internal ((this llm) persona query history &key (check-loop-p t))
   (let ((request-id (llm-response:generate-request-id)))
 
     (if history
@@ -121,12 +121,12 @@ You must use loop_detection tool as notify the user."
                   :text "LLM response" :json api-response
                   :total-tokens (api-provider:get-total-tokens (api-provider this) api-response-alist))
 
-          (let* (
-                 (previous-len (length (history this)))
+          (let* ((previous-len (length (history this)))
                  (llm-responses (api-provider:handle-response (api-provider this) api-response-alist request-id)))
 
-            (if (< (mod (+ previous-len (length llm-responses)) 50)
-                   (mod previous-len 50))
+            (if (and check-loop-p
+                     (< (mod (+ previous-len (length llm-responses)) 50)
+                        (mod previous-len 50)))
                 (detect-loop-in-conversation this))
 
             (act-on-llm-response this persona llm-responses)))
@@ -147,7 +147,8 @@ You must use loop_detection tool as notify the user."
       (send-query/internal sub
                            loop-detector-persona
                            (persona:user loop-detector-persona)
-                           (copy-list (history llm))))))
+                           (copy-list (history llm))
+                           :check-loop-p nil))))
 
 (defun compact-history (llm)
   (signal 'conditions:llm-condition :text "Compacting history.")
@@ -217,7 +218,10 @@ You must use loop_detection tool as notify the user."
           (log:warn "request: ~A~%response: ~A" content e)
           (if (search "exceeds the context window limit" (dex:response-body e))
               (error 'context-exceeded)
-              (error e)))))))
+              (error e)))
+        (error (e)
+          (log:error "~A" e)
+          (error e))))))
 
 (define-condition context-exceeded () ())
 

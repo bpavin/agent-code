@@ -74,8 +74,6 @@
     (iterative-code-validation *ctx* query)))
 
 (defun ask (query &key (mode :coordinator))
-  (setf query (append-file-content query))
-
   (handler-bind ((conditions:llm-condition
                    (lambda (e)
                      (conditions:print-log e))))
@@ -99,15 +97,6 @@
       (:coordinator
        (let* ((persona personas:coordinator-persona))
          (llm:send-query *ctx* persona query nil))))))
-
-(defun append-file-content (query)
-  (if query
-      (cl-ppcre:do-register-groups (file-path) ("@([^\\s]+)" query)
-        (if (probe-file file-path)
-            (setf query
-                  (format nil "~A~% ----- ~A -----~%~A~%~%"
-                          query file-path (alexandria:read-file-into-string file-path))))))
-  query)
 
 (defun iterative-code-validation (llm prompt &key (max-iterations 5))
   "Orchestrates coding-validation loop with failure recovery."
