@@ -106,8 +106,12 @@ Files are prepended with line numbers separated from file content with character
 (defmethod tool-execute ((tool write-tool) args &rest options)
   (if (< (length args) 2)
       (error "Not enough arguments specified for writing."))
-  (alexandria:write-string-into-file (aget args :content) (aget args :path)
-                                     :if-exists :supersede)
+  (let* ((arg-path (aget args :path))
+         (dir (directory-namestring arg-path)))
+    (ensure-directories-exist dir)
+    (alexandria:write-string-into-file (aget args :content) arg-path
+                                       :if-does-not-exist :create
+                                       :if-exists :supersede))
   "Success, file is written.")
 
 (defclass edit-file-tool (tool)
